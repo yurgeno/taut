@@ -1,0 +1,26 @@
+# The suite is the project's own claim of integrity — it must run on every push.
+# Node 24 is the floor: the compiler is TypeScript executed natively (type stripping).
+name: test
+
+on:
+  push:
+    branches: [master]
+  pull_request:
+  workflow_dispatch:
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          # The staleness suite prefers real history; it falls back to a synthetic
+          # commit when there is none, so a shallow checkout would pass either way.
+          fetch-depth: 0
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '24'
+          cache: npm
+      - run: npm ci
+      # Typecheck (tsc --noEmit) + the behavioural suite, exactly as documented.
+      - run: npm test

@@ -1,0 +1,663 @@
+<!doctype html>
+<html lang="en"><head><meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>TAUT panel</title>
+<style>
+  :root { color-scheme: dark;
+    --bg: #0f1115; --panel: #151920; --panel2: #10141a; --border: #242b36;
+    --text: #dde2ea; --muted: #8a93a3; --accent: #5c8ef2;
+    --ok: #3fb076; --warn: #d9a13b; --bad: #e06060; }
+  * { box-sizing: border-box; }
+  body { margin: 0; background: var(--bg); color: var(--text);
+         font: 13px/1.5 -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif; }
+  .mono { font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace; }
+  .wrap { max-width: 1480px; margin: 0 auto; padding: 22px 26px 40px; }
+  h1 { font-size: 15px; font-weight: 650; letter-spacing: .02em; margin: 0; }
+  #sub { font-family: ui-monospace, SFMono-Regular, Menlo, monospace; font-size: 11.5px;
+         color: var(--muted); margin: 5px 0 14px; word-break: break-all; }
+  .badges { display: flex; flex-wrap: wrap; gap: 6px; margin-bottom: 14px; }
+  .badge { font-size: 11.5px; font-weight: 500; line-height: 1; padding: 5px 10px;
+           border: 1px solid var(--border); border-radius: 999px; color: var(--muted);
+           background: var(--panel); white-space: nowrap; }
+  .badge.ok   { color: #6fd49a; border-color: #2b5c42; background: rgba(63,176,118,.08); }
+  .badge.warn { color: #e4b45e; border-color: #6b5620; background: rgba(217,161,59,.08); }
+  .badge.bad  { color: #ef8b8b; border-color: #6d2f2f; background: rgba(224,96,96,.08); }
+  .tabs { display: flex; gap: 2px; border-bottom: 1px solid var(--border); margin-bottom: 16px; }
+  .tab { padding: 8px 14px 9px; background: transparent; border: none; color: var(--muted);
+         font: 500 12.5px/1 inherit; font-family: inherit; cursor: pointer;
+         border-bottom: 2px solid transparent; margin-bottom: -1px; }
+  .tab:hover { color: var(--text); }
+  .tab.active { color: var(--text); border-bottom-color: var(--accent); }
+  .tab:focus { outline: none; } .tab:focus-visible { outline: 2px solid var(--accent); }
+  .actions { display: flex; align-items: center; gap: 8px; margin-bottom: 18px; flex-wrap: wrap; }
+  .btn { height: 32px; padding: 0 16px; border-radius: 8px; border: 1px solid #2e3644;
+         background: #1b212b; color: var(--text); font: 500 12.5px/1 inherit;
+         font-family: inherit; cursor: pointer;
+         transition: background .12s ease, border-color .12s ease; }
+  .btn:hover:not(:disabled) { background: #232b38; border-color: #3b465a; }
+  .btn:active:not(:disabled) { background: #1e2530; }
+  .btn:disabled { opacity: .38; cursor: default; }
+  .btn:focus { outline: none; }
+  .btn:focus-visible { outline: 2px solid var(--accent); outline-offset: 1px; }
+  .btn.primary { background: #2b4c8c; border-color: #3a62b0; }
+  .btn.primary:hover:not(:disabled) { background: #33589f; }
+  #pending { font-family: ui-monospace, SFMono-Regular, Menlo, monospace; font-size: 11.5px;
+             color: var(--muted); display: flex; gap: 8px; flex-wrap: wrap; }
+  #pending .add { color: #6fd49a; } #pending .del { color: #ef8b8b; }
+  .grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(380px, 1fr)); gap: 14px; }
+  section { background: var(--panel); border: 1px solid var(--border); border-radius: 12px;
+            padding: 14px 16px 12px; }
+  section > h2 { font-size: 11px; font-weight: 600; letter-spacing: .09em; text-transform: uppercase;
+       color: var(--muted); margin: 0 0 10px; }
+  .item { display: grid; grid-template-columns: 16px 172px minmax(0, 1fr);
+          column-gap: 10px; align-items: center; min-height: 30px;
+          padding: 0 8px; margin: 0 -8px; border-radius: 7px; }
+  .item.mcp { grid-template-columns: 16px 78px minmax(0, 1fr); grid-template-rows: auto auto;
+              padding-bottom: 6px; }
+  .item.mcp .env { grid-column: 2 / 4; grid-row: 2; margin: 1px 0 0; }
+  .item:hover { background: rgba(255,255,255,.025); }
+  .item.blocked .name, .item.blocked .chip { opacity: .45; }
+  .item input { width: 14px; height: 14px; margin: 0; accent-color: var(--accent); cursor: pointer; }
+  .item input:disabled { cursor: default; }
+  .name { font-family: ui-monospace, SFMono-Regular, Menlo, monospace; font-size: 12.5px;
+          font-weight: 500; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+          cursor: pointer; }
+  .meta { display: flex; gap: 6px; min-width: 0; overflow: hidden; align-items: center; }
+  .chip { font-size: 11px; line-height: 1; padding: 4px 8px; border: 1px solid var(--border);
+          border-radius: 999px; color: var(--muted); white-space: nowrap; overflow: hidden;
+          text-overflow: ellipsis; flex-shrink: 1; min-width: 0; }
+  .chip.excl { color: #e4b45e; border-color: #6b5620; flex-shrink: 0; }
+  .chip.proj { color: #9bb8ef; border-color: #33507e; flex-shrink: 0; }
+  .reason { font-size: 11px; color: var(--muted); white-space: nowrap; overflow: hidden;
+            text-overflow: ellipsis; }
+  .env { display: flex; gap: 10px; align-items: center; flex-wrap: wrap; }
+  .envk { font-family: ui-monospace, SFMono-Regular, Menlo, monospace; font-size: 10.5px;
+          color: var(--muted); display: inline-flex; align-items: center; gap: 4px;
+          white-space: nowrap; }
+  .dot { width: 7px; height: 7px; border-radius: 50%; background: #3a4352; flex-shrink: 0; }
+  .dot.on { background: var(--ok); }
+  .logwrap { margin-top: 14px; }
+  #log { margin: 0; background: var(--panel2); border: 1px solid var(--border);
+         border-radius: 12px; padding: 12px 14px; font-size: 11.5px; line-height: 1.55;
+         font-family: ui-monospace, SFMono-Regular, Menlo, monospace; color: #9aa6b8;
+         white-space: pre-wrap; max-height: 300px; min-height: 56px; overflow: auto; }
+  /* ------------------------------------------------------------------ docs tab */
+  .docs-layout { display: grid; grid-template-columns: 250px minmax(0, 1fr); gap: 14px;
+                 align-items: start; }
+  .docnav { background: var(--panel); border: 1px solid var(--border); border-radius: 12px;
+            padding: 8px; position: sticky; top: 16px; }
+  .doc-link { display: block; width: 100%; text-align: left; background: transparent;
+              border: none; padding: 8px 11px; border-radius: 7px; cursor: pointer;
+              font-family: ui-monospace, SFMono-Regular, Menlo, monospace; font-size: 12.5px;
+              color: var(--muted); overflow: hidden; text-overflow: ellipsis;
+              white-space: nowrap; }
+  .doc-link:hover { background: rgba(255,255,255,.03); color: var(--text); }
+  .doc-link.active { background: rgba(92,142,242,.13); color: var(--text); }
+  .doc-link:focus { outline: none; } .doc-link:focus-visible { outline: 2px solid var(--accent); }
+  .docview { background: var(--panel); border: 1px solid var(--border); border-radius: 12px;
+             padding: 22px 28px 26px; min-height: 320px; font-size: 13px; line-height: 1.65; }
+  .docview .placeholder { color: var(--muted); }
+  .docview h1 { font-size: 17px; font-weight: 650; margin: 2px 0 12px; letter-spacing: 0; }
+  .docview h2 { font-size: 14.5px; font-weight: 650; margin: 20px 0 8px; color: var(--text);
+                text-transform: none; letter-spacing: 0; }
+  .docview h3 { font-size: 13.5px; font-weight: 600; margin: 16px 0 6px; }
+  .docview h4 { font-size: 12.5px; font-weight: 600; margin: 14px 0 6px; color: var(--muted); }
+  .docview p { margin: 8px 0; }
+  .docview ul, .docview ol { margin: 8px 0; padding-left: 22px; }
+  .docview li { margin: 3px 0; }
+  .docview code { font-family: ui-monospace, SFMono-Regular, Menlo, monospace; font-size: 11.5px;
+                  background: #1d232e; border: 1px solid #2b3342; border-radius: 5px;
+                  padding: 1px 5px; }
+  .docview pre { background: var(--panel2); border: 1px solid var(--border); border-radius: 10px;
+                 padding: 12px 14px; overflow-x: auto; margin: 10px 0; }
+  .docview pre code { background: transparent; border: 0; padding: 0; font-size: 11.5px;
+                      line-height: 1.55; }
+  .docview table { border-collapse: collapse; margin: 12px 0; width: 100%; font-size: 12.5px; }
+  .docview th, .docview td { border: 1px solid var(--border); padding: 6px 10px;
+                             text-align: left; vertical-align: top; }
+  .docview th { background: #1a202a; font-weight: 600; }
+  .docview blockquote { margin: 10px 0; padding: 8px 14px; border-left: 3px solid #33507e;
+                        background: rgba(92,142,242,.05); color: var(--muted); }
+  .docview blockquote p { margin: 4px 0; }
+  .docview hr { border: 0; border-top: 1px solid var(--border); margin: 16px 0; }
+  .docview a { color: #8ab4f8; }
+  /* ------------------------------------------------------------------ memory tab */
+  .treebar { display: flex; align-items: center; justify-content: space-between;
+             gap: 8px; padding: 2px 4px 8px; }
+  .treeroot { font-family: ui-monospace, SFMono-Regular, Menlo, monospace; font-size: 10.5px;
+              color: var(--muted); overflow: hidden; text-overflow: ellipsis;
+              white-space: nowrap; direction: rtl; text-align: left; }
+  .btn.mini { height: 24px; padding: 0 10px; font-size: 11px; flex-shrink: 0; }
+  .tree-row { display: flex; align-items: center; gap: 5px; width: 100%; text-align: left;
+              background: transparent; border: none; padding: 5px 8px; border-radius: 7px;
+              cursor: pointer; color: var(--muted); overflow: hidden; }
+  .tree-row:hover { background: rgba(255,255,255,.03); color: var(--text); }
+  .tree-row.active { background: rgba(92,142,242,.13); color: var(--text); }
+  .tree-row:focus { outline: none; } .tree-row:focus-visible { outline: 2px solid var(--accent); }
+  .tree-row .arrow { width: 10px; flex-shrink: 0; font-size: 9px; color: var(--muted); }
+  .tree-row .fname { font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+                     font-size: 12px; overflow: hidden; text-overflow: ellipsis;
+                     white-space: nowrap; }
+  .tree-row.dir .fname { color: #a8c2f0; }
+  .tree-row .fsize { margin-left: auto; font-size: 10px; color: #5a6372; flex-shrink: 0;
+                     font-family: ui-monospace, SFMono-Regular, Menlo, monospace; }
+  .memhead { display: flex; align-items: baseline; gap: 10px; margin-bottom: 10px;
+             border-bottom: 1px solid var(--border); padding-bottom: 8px; }
+  .memhead .p { font-family: ui-monospace, SFMono-Regular, Menlo, monospace; font-size: 12px;
+                color: var(--text); word-break: break-all; }
+  .memhead .s { font-size: 11px; color: var(--muted); white-space: nowrap; }
+  .memimg { max-width: 100%; border: 1px solid var(--border); border-radius: 8px; }
+  .memnote { color: var(--muted); font-size: 12px; margin-top: 8px; }
+</style></head><body>
+<div class="wrap">
+  <h1>TAUT panel</h1>
+  <div id="sub"></div>
+  <div class="badges" id="badges"></div>
+  <nav class="tabs">
+    <button class="tab active" id="tabbtn-control" data-tab="control" title="the acting surface: status badges, harness/skill/MCP/repo toggles, update &amp; repair actions">Control</button>
+    <button class="tab" id="tabbtn-docs" data-tab="docs" title="the workspace's shipped documentation (.taut/docs + LAWS.md) — read-only">Docs</button>
+    <button class="tab" id="tabbtn-memory" data-tab="memory" title="instance data browser (ticket memory, telemetry) — read-only; the framework never writes or sweeps here">Memory</button>
+  </nav>
+  <div id="tab-control">
+    <div class="actions">
+      <button class="btn" id="btnUpdate">Update workspace</button>
+      <button class="btn" id="btnUpdateData">Update data</button>
+      <button class="btn" id="btnUpdateFrom">Refresh deployment</button>
+      <button class="btn" id="btnRepair">Repair</button>
+      <button class="btn" id="btnCheck" title="readiness check: integrity, live gate self-test, repos reachable, data files readable, memory writable, MCP handshakes">Check</button>
+      <button class="btn" id="btnMode">Mode</button>
+      <button class="btn" id="btnApply" disabled>Apply changes</button>
+      <span id="pending"></span>
+    </div>
+    <div class="grid">
+      <section><h2>Harness</h2><div id="harness"></div></section>
+      <section><h2>Skills</h2><div id="skills"></div></section>
+      <section><h2>MCP servers</h2><div id="mcp"></div></section>
+      <section><h2>Repos</h2><div id="repos"></div></section>
+    </div>
+    <div class="logwrap"><pre id="log">panel ready.</pre></div>
+  </div>
+  <div id="tab-docs" hidden>
+    <div class="docs-layout">
+      <div class="docnav" id="doclist"></div>
+      <article class="docview" id="docbody"><p class="placeholder">Pick a document.</p></article>
+    </div>
+  </div>
+  <div id="tab-memory" hidden>
+    <div class="docs-layout">
+      <div class="docnav" id="memnav">
+        <div class="treebar"><span id="memroot" class="treeroot"></span>
+          <button class="btn mini" id="btnMemRefresh" title="re-scan the memory tree (the panel never writes here)">Refresh</button></div>
+        <div id="memtree"></div>
+      </div>
+      <article class="docview" id="memview"><p class="placeholder">Pick a file.</p></article>
+    </div>
+  </div>
+</div>
+<script>
+"use strict";
+var TOKEN = "%%TOKEN%%";
+var state = null;
+var desired = { skills: {}, mcp: {}, repos: {}, harness: {} }; // name -> bool overrides vs installed/connected/enabled
+var acting = false;
+var currentDoc = null;
+
+function esc(s) { return String(s == null ? "" : s).replace(/[&<>"']/g, function (c) {
+  return { "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[c]; }); }
+function $(id) { return document.getElementById(id); }
+function logLine(s) { var el = $("log"); el.textContent += "\n" + s; el.scrollTop = el.scrollHeight; }
+
+/* ------------------------------------------------------------------ markdown (mini) */
+/* Deliberately a SUBSET renderer for the framework's own docs: headings, paragraphs,
+   lists, tables, fenced code, inline code/bold/links, blockquotes, rules. Input is
+   escaped first; frontmatter is stripped. */
+function inline(s) {
+  s = s.replace(/`([^`]+)`/g, "<code>$1</code>");
+  s = s.replace(/\*\*([^*]+)\*\*/g, "<strong>$1</strong>");
+  s = s.replace(/\[([^\]]+)\]\((https?:[^)\s]+)\)/g, '<a href="$2" target="_blank" rel="noopener">$1</a>');
+  return s;
+}
+function mdRender(src) {
+  if (src.slice(0, 4) === "---\n") {
+    var fmEnd = src.indexOf("\n---\n", 3);
+    if (fmEnd !== -1) src = src.slice(fmEnd + 5);
+  }
+  var out = [], para = [], quote = [], table = [], fenceBuf = [];
+  var list = null, fence = false;
+  function flushPara() { if (para.length) { out.push("<p>" + inline(esc(para.join(" "))) + "</p>"); para = []; } }
+  function flushList() {
+    if (!list) return;
+    out.push("<" + list.tag + ">" + list.items.map(function (i) {
+      return "<li>" + inline(esc(i)) + "</li>"; }).join("") + "</" + list.tag + ">");
+    list = null;
+  }
+  function flushQuote() { if (quote.length) { out.push("<blockquote><p>" + inline(esc(quote.join(" "))) + "</p></blockquote>"); quote = []; } }
+  function flushTable() {
+    if (!table.length) return;
+    var rows = [];
+    table.forEach(function (r) {
+      if (/^[\s|:-]+$/.test(r)) return; // the |---|---| separator row
+      rows.push(r.replace(/^\s*\|/, "").replace(/\|\s*$/, "").split("|").map(function (c) {
+        return inline(esc(c.trim())); }));
+    });
+    table = [];
+    if (!rows.length) return;
+    var html = "<table><thead><tr>" + rows[0].map(function (c) { return "<th>" + c + "</th>"; }).join("") + "</tr></thead>";
+    if (rows.length > 1) html += "<tbody>" + rows.slice(1).map(function (r) {
+      return "<tr>" + r.map(function (c) { return "<td>" + c + "</td>"; }).join("") + "</tr>"; }).join("") + "</tbody>";
+    out.push(html + "</table>");
+  }
+  function flushAll() { flushPara(); flushList(); flushQuote(); flushTable(); }
+
+  src.split("\n").forEach(function (raw) {
+    if (fence) {
+      if (/^```/.test(raw.trim())) { out.push("<pre><code>" + esc(fenceBuf.join("\n")) + "</code></pre>"); fenceBuf = []; fence = false; }
+      else fenceBuf.push(raw);
+      return;
+    }
+    var t = raw.trim();
+    if (/^```/.test(t)) { flushAll(); fence = true; return; }
+    if (!t) { flushAll(); return; }
+    if (t.charAt(0) === "|") { flushPara(); flushList(); flushQuote(); table.push(t); return; }
+    flushTable();
+    var h = /^(#{1,4})\s+(.*)$/.exec(t);
+    if (h) { flushAll(); out.push("<h" + h[1].length + ">" + inline(esc(h[2])) + "</h" + h[1].length + ">"); return; }
+    if (t.charAt(0) === ">") { flushPara(); flushList(); quote.push(t.replace(/^>\s?/, "")); return; }
+    if (/^(-{3,}|\*{3,})$/.test(t)) { flushAll(); out.push("<hr>"); return; }
+    var li = /^[-*]\s+(.*)$/.exec(t);
+    if (li) { flushPara(); flushQuote(); if (!list || list.tag !== "ul") { flushList(); list = { tag: "ul", items: [] }; } list.items.push(li[1]); return; }
+    var oli = /^\d+\.\s+(.*)$/.exec(t);
+    if (oli) { flushPara(); flushQuote(); if (!list || list.tag !== "ol") { flushList(); list = { tag: "ol", items: [] }; } list.items.push(oli[1]); return; }
+    if (list && /^\s{2,}/.test(raw)) { list.items[list.items.length - 1] += " " + t; return; }
+    if (quote.length) { quote.push(t); return; }
+    para.push(t);
+  });
+  if (fence) out.push("<pre><code>" + esc(fenceBuf.join("\n")) + "</code></pre>");
+  flushAll();
+  return out.join("\n");
+}
+
+/* ------------------------------------------------------------------ tabs */
+function switchTab(name) {
+  ["control", "docs", "memory"].forEach(function (n) {
+    $("tab-" + n).hidden = n !== name;
+    $("tabbtn-" + n).classList.toggle("active", n === name);
+  });
+  if (history.replaceState) history.replaceState(null, "", "#" + name);
+  if (name === "docs" && state && !currentDoc && state.docs.length) openDoc(state.docs[0]);
+  if (name === "memory") loadMemory();
+}
+$("tabbtn-control").onclick = function () { switchTab("control"); };
+$("tabbtn-docs").onclick = function () { switchTab("docs"); };
+$("tabbtn-memory").onclick = function () { switchTab("memory"); };
+
+/* ------------------------------------------------------------------ memory tab */
+var memTree = null;
+var memExpanded = {};   // dir path -> true
+var currentMem = null;
+
+function fmtSize(n) {
+  if (n == null) return "";
+  if (n < 1024) return n + " B";
+  if (n < 1024 * 1024) return (n / 1024).toFixed(n < 10240 ? 1 : 0) + " K";
+  return (n / (1024 * 1024)).toFixed(1) + " M";
+}
+
+function loadMemory() {
+  return fetch("/api/memory").then(function (r) { return r.json(); }).then(function (m) {
+    if (m.error) { $("memtree").innerHTML = '<div class="placeholder" style="padding:8px 11px">' + esc(m.error) + "</div>"; return; }
+    memTree = m;
+    $("memroot").textContent = m.root;
+    $("memroot").title = m.root;
+    renderMemTree();
+  }).catch(function (e) { $("memtree").innerHTML = '<div class="placeholder" style="padding:8px 11px">' + esc(String(e)) + "</div>"; });
+}
+
+function renderMemTree() {
+  var h = "";
+  function walk(nodes, prefix, depth) {
+    nodes.forEach(function (n) {
+      var p = prefix ? prefix + "/" + n.name : n.name;
+      var pad = 8 + depth * 14;
+      if (n.type === "dir") {
+        var open = !!memExpanded[p];
+        h += '<button class="tree-row dir" data-dir="' + esc(p) + '" style="padding-left:' + pad + 'px">'
+          + '<span class="arrow">' + (open ? "▾" : "▸") + '</span><span class="fname">' + esc(n.name) + "/</span></button>";
+        if (open) walk(n.children || [], p, depth + 1);
+      } else {
+        h += '<button class="tree-row' + (p === currentMem ? " active" : "") + '" data-file="' + esc(p) + '" style="padding-left:' + (pad + 15) + 'px">'
+          + '<span class="fname">' + esc(n.name) + '</span><span class="fsize">' + fmtSize(n.size) + "</span></button>";
+      }
+    });
+  }
+  walk(memTree.tree, "", 0);
+  if (memTree.truncated) h += '<div class="placeholder" style="padding:8px 11px">listing truncated…</div>';
+  $("memtree").innerHTML = h || '<div class="placeholder" style="padding:8px 11px">memory is empty</div>';
+  Array.prototype.forEach.call(document.querySelectorAll("[data-dir]"), function (el) {
+    el.onclick = function () { memExpanded[el.dataset.dir] = !memExpanded[el.dataset.dir]; renderMemTree(); };
+  });
+  Array.prototype.forEach.call(document.querySelectorAll("[data-file]"), function (el) {
+    el.onclick = function () { openMem(el.dataset.file); };
+  });
+}
+
+function memHead(name, size, note) {
+  return '<div class="memhead"><span class="p">' + esc(name) + '</span><span class="s">'
+    + esc(fmtSize(size)) + (note ? " · " + esc(note) : "") + "</span></div>";
+}
+
+function openMem(p) {
+  fetch("/api/memfile?path=" + encodeURIComponent(p)).then(function (r) { return r.json(); }).then(function (d) {
+    if (d.error) { $("memview").innerHTML = '<p class="placeholder">' + esc(d.error) + "</p>"; return; }
+    currentMem = p;
+    var body;
+    if (d.image) {
+      body = '<img class="memimg" src="/api/memraw?path=' + encodeURIComponent(p) + '" alt="' + esc(p) + '">';
+    } else if (d.binary) {
+      body = '<p class="memnote">Binary file — not viewable here.</p>';
+    } else if (/\.md$/.test(p)) {
+      body = mdRender(d.text);
+    } else {
+      body = "<pre><code>" + esc(d.text) + "</code></pre>";
+    }
+    if (d.truncated) body += '<p class="memnote">— truncated at 512 K —</p>';
+    $("memview").innerHTML = memHead(d.name, d.size) + body;
+    renderMemTree();
+  }).catch(function (e) { $("memview").innerHTML = '<p class="placeholder">' + esc(String(e)) + "</p>"; });
+}
+
+$("btnMemRefresh").onclick = function () { loadMemory(); };
+
+/* ------------------------------------------------------------------ docs tab */
+function renderDocs() {
+  var h = "";
+  state.docs.forEach(function (n) {
+    var hint = n === "LAWS.md"
+      ? "the deployment laws — the canonical rule text every session in this workspace is governed by (integrity-locked)"
+      : /^FLOW-/.test(n)
+        ? "a flow definition — the documented launch order of the installed stage skills"
+        : "shipped workspace documentation (integrity-locked, read-only)";
+    h += '<button class="doc-link' + (n === currentDoc ? " active" : "") + '" data-doc="' + esc(n) + '" title="' + esc(hint) + '">' + esc(n) + "</button>";
+  });
+  $("doclist").innerHTML = h || '<div class="placeholder" style="padding:8px 11px">no docs installed</div>';
+  Array.prototype.forEach.call(document.querySelectorAll(".doc-link"), function (el) {
+    el.onclick = function () { openDoc(el.dataset.doc); };
+  });
+}
+function openDoc(name) {
+  fetch("/api/doc?name=" + encodeURIComponent(name)).then(function (r) { return r.json(); }).then(function (d) {
+    if (d.error) { $("docbody").innerHTML = '<p class="placeholder">' + esc(d.error) + "</p>"; return; }
+    currentDoc = name;
+    $("docbody").innerHTML = mdRender(d.text);
+    renderDocs();
+  }).catch(function (e) { $("docbody").innerHTML = '<p class="placeholder">' + esc(String(e)) + "</p>"; });
+}
+
+/* ------------------------------------------------------------------ control tab */
+function diff() {
+  var d = { skills: { enable: [], disable: [] }, mcp: { enable: [], disable: [] },
+            repos: { connect: [], disconnect: [] }, harness: { enable: [], disable: [] } };
+  if (!state) return d;
+  (state.harnessesAvailable || []).forEach(function (h) {
+    var want = desired.harness[h];
+    if (want === undefined) return;
+    var on = (state.harnesses || []).indexOf(h) !== -1;
+    if (want && !on) d.harness.enable.push(h);
+    if (!want && on) d.harness.disable.push(h);
+  });
+  state.skills.forEach(function (s) {
+    var want = desired.skills[s.name];
+    if (want === undefined || s.blocked) return;
+    if (want && !s.installed) d.skills.enable.push(s.name);
+    if (!want && s.installed) d.skills.disable.push(s.name);
+  });
+  state.mcp.forEach(function (m) {
+    var want = desired.mcp[m.id];
+    if (want === undefined) return;
+    if (want && !m.installed) d.mcp.enable.push(m.id);
+    if (!want && m.installed) d.mcp.disable.push(m.id);
+  });
+  (state.repos || []).forEach(function (r) {
+    var want = desired.repos[r.name];
+    if (want === undefined || r.mandatory) return;
+    if (want && !r.connected) d.repos.connect.push(r.path); // path — unambiguous for the CLI
+    if (!want && r.connected) d.repos.disconnect.push(r.name);
+  });
+  return d;
+}
+
+function render() {
+  var st = state.status;
+  $("sub").textContent = st.workspace + (state.memoryRoot ? "   ·   memory: " + state.memoryRoot : "");
+  var fw = st.framework;
+  /* Every badge explains itself on hover (native title tooltips). */
+  var bd = function (text, title, cls) {
+    return '<span class="badge' + (cls ? " " + cls : "") + '" title="' + esc(title) + '">' + text + "</span>";
+  };
+  var b = "";
+  b += bd(esc(state.deployment || "generic"), state.deployment
+    ? "deployment config: this workspace compiles from " + state.deployment + "/deployment.json in the data pack — the project VALUES (repo map, model tiers, stacks, law parameters)"
+    : "no deployment config — generic framework mode, no project values");
+  b += bd(esc((state.harnesses || []).join(" + ")),
+    "enabled agent harness(es) — each has its full native toolchain installed side by side; switch them in the Harness section below");
+  b += state.mode === "strict"
+    ? bd("mode: STRICT", "only the compiled toolchain runs — foreign skills/agents/MCP are denied at invocation by the gate (harness built-ins unaffected); the Mode button lifts it in one recompile", "warn")
+    : bd("mode: normal", "framework artifacts coexist with your own skills/agents/MCP — the gate only guards what it manages; the Mode button switches to STRICT in one recompile");
+  b += bd("atlas " + (state.atlas ? "on" : "off"), state.atlas
+    ? "Atlas knowledge-engine integration is ON: lookup discipline + self-maintenance skills are installed"
+    : "Atlas integration is OFF: skills operate code-first, Atlas directives are compiled OUT of the installed artifacts");
+  b += st.current
+    ? bd("ACTUAL · pin " + esc((fw.pin || "").slice(0, 7)),
+      "up to date: the workspace matches its pinned framework + data-pack commits, and every artifact matches the integrity lock", "ok")
+    : bd("NOT CURRENT",
+      "something moved: the framework/pack is ahead, artifacts drifted, or MCP pins fell behind the catalog — hover the action buttons for the fix", "warn");
+  if (fw.behind > 0) b += bd("core behind by " + fw.behind,
+    "the framework ENGINE repo gained " + fw.behind + " commit(s) since this workspace was compiled — Update workspace re-pins and recompiles", "warn");
+  var dt = st.data;
+  if (dt) {
+    b += bd("pack: " + esc(dt.pack || "data") + (dt.pin ? " @ " + esc(dt.pin.slice(0, 7)) : ""),
+      "the DATA PACK — content source (skills, agents, docs, runbooks, deployments)" + (dt.pin ? " and the commit this workspace is pinned to" : " (not a git repo — currency not judged)"));
+    if (dt.behind > 0) b += bd("pack behind by " + dt.behind,
+      "the data pack gained " + dt.behind + " commit(s) — Update data re-pins the content while the core pin stays", "warn");
+  }
+  if (!fw.canonical) b += bd("NON-CANONICAL",
+    "built from a DIRTY framework or pack tree (uncommitted changes at compile) — a dev build; recompile from committed trees for a canonical one", "warn");
+  if (st.artifacts.drifted.length) b += bd(st.artifacts.drifted.length + " drifted",
+    "artifact(s) modified outside the pipeline: " + st.artifacts.drifted.slice(0, 6).join(", ") + " — managed skills/agents are BLOCKED at invocation until repaired", "bad");
+  b += bd(st.artifacts.total + " artifacts",
+    "files under the integrity lock (taut.lock): each one is hash-verified; the gate blocks any that drift");
+  b += bd("selection: " + esc(state.skillsSelection), state.skillsSelection === "all"
+    ? "skill-selection intent ALL: updates auto-install newly shipped skills (minus your explicit exclusions)"
+    : "skill-selection intent CUSTOM: the installed set stays fixed; new skills are only advertised on update");
+  $("badges").innerHTML = b;
+
+  var fwBehind = fw.behind > 0 ? fw.behind : 0;
+  var dtBehind = dt && dt.behind > 0 ? dt.behind : 0;
+  var behindTotal = fwBehind + dtBehind;
+  $("btnUpdate").disabled = acting || st.current;
+  $("btnUpdate").textContent = behindTotal > 0 ? "Update workspace (behind " + behindTotal + ")" : "Update workspace";
+  $("btnUpdate").title = st.current
+    ? "workspace is CURRENT (pins == HEAD, no drift) — nothing to update; deployment VALUES refresh separately via Refresh deployment"
+    : "re-pin to the framework/pack HEAD, one recompile (user selections stay)";
+  /* Values channel, orthogonal to pins: profile blocks (model tiers, stacks, flow
+     values) enter the manifest only through --from-deployment — a plain update
+     deliberately preserves the workspace's own values (repair fidelity). */
+  $("btnUpdateFrom").disabled = acting || !state.deployment;
+  $("btnUpdateFrom").title = state.deployment
+    ? "factory refresh: re-read " + state.deployment + "/deployment.json VALUES (model tiers, stacks, flow values) into the manifest + update pins; your selections (harness, skills, MCP, repos) stay"
+    : "no deployment config — nothing to refresh from";
+  /* Data-only actualization: enabled when ONLY the pack moved — with the core also
+     behind, a recompile would silently re-pin the core (the CLI refuses), so the full
+     update is the honest button then. */
+  $("btnUpdateData").disabled = acting || dtBehind === 0 || fwBehind > 0;
+  $("btnUpdateData").textContent = dtBehind > 0 ? "Update data (behind " + dtBehind + ")" : "Update data";
+  $("btnUpdateData").title = fwBehind > 0
+    ? "the framework core also moved — a data-only update would silently re-pin it; use Update workspace"
+    : "re-pin the DATA PACK alone: new skills, docs and repo descriptors flow in; the core pin stays";
+  $("btnCheck").disabled = acting;
+  $("btnMode").disabled = acting;
+  $("btnMode").textContent = state.mode === "strict" ? "Mode → normal" : "Mode → strict";
+  $("btnMode").title = state.mode === "strict"
+    ? "lift the strict regime: foreign skills/agents/MCP become usable again (one recompile)"
+    : "switch to STRICT: only the compiled toolchain runs — foreign skills/agents/MCP denied at invocation (one recompile)";
+  $("btnRepair").disabled = acting;
+  $("btnRepair").textContent = st.artifacts.drifted.length ? "Repair (" + st.artifacts.drifted.length + " drifted)" : "Repair";
+  $("btnRepair").title = st.artifacts.drifted.length
+    ? "heal: one recompile from the workspace's own manifest — restores the " + st.artifacts.drifted.length + " drifted artifact(s) and the integrity gate"
+    : "heal: one recompile from the workspace's own manifest — restores drifted/deleted artifacts and the gate (renders with the current framework tree)";
+  $("btnApply").title = "apply the checked Harness / Skills / MCP / Repos changes as ONE batch recompile — the pending diff is listed beside the buttons";
+
+  /* Harness switches: one row per available harness. Enabled = its full native
+     toolchain is installed; the last enabled one cannot be unchecked. */
+  var hh = "";
+  var enabledH = {};
+  (state.harnesses || []).forEach(function (h) { enabledH[h] = true; });
+  var wantOn = (state.harnessesAvailable || []).filter(function (h) {
+    return desired.harness[h] !== undefined ? desired.harness[h] : !!enabledH[h];
+  });
+  var hHints = {
+    "claude-code": "native Claude Code targets: .claude/skills, .claude/agents, CLAUDE.md, .mcp.json, .claude/settings.json (gate hooks)",
+    codex: "native Codex targets: .agents/skills, .codex/agents, AGENTS.md, .codex/config.toml (MCP + gate hooks)"
+  };
+  (state.harnessesAvailable || []).forEach(function (h) {
+    var checked = desired.harness[h] !== undefined ? desired.harness[h] : !!enabledH[h];
+    var lastOn = checked && wantOn.length === 1;
+    hh += '<div class="item">'
+      + '<input type="checkbox" id="hn-' + esc(h) + '"' + (checked ? " checked" : "")
+      + (acting || lastOn ? " disabled" : "") + ' data-harness="' + esc(h) + '"'
+      + (lastOn ? ' title="at least one harness must stay enabled"' : "") + '>'
+      + '<label class="name" for="hn-' + esc(h) + '" title="'
+      + (hHints[h] || "this harness&#39;s native toolchain targets")
+      + '">' + esc(h) + "</label>"
+      + '<span class="meta">' + (enabledH[h] ? '<span class="chip proj">enabled</span>' : "") + "</span></div>";
+  });
+  $("harness").innerHTML = hh;
+
+  var sh = "";
+  state.skills.forEach(function (s) {
+    var checked = desired.skills[s.name] !== undefined ? desired.skills[s.name] : s.installed;
+    sh += '<div class="item' + (s.blocked ? " blocked" : "") + '">'
+      + '<input type="checkbox" id="sk-' + esc(s.name) + '"' + (checked ? " checked" : "")
+      + (s.blocked || acting ? " disabled" : "") + ' data-skill="' + esc(s.name) + '">'
+      + '<label class="name" for="sk-' + esc(s.name) + '" title="' + esc(s.description) + '">' + esc(s.name) + "</label>"
+      + '<span class="meta">';
+    if (s.blocked) sh += '<span class="reason">' + esc(s.blocked) + "</span>";
+    if (s.excluded) sh += '<span class="chip excl">excluded</span>';
+    if (s.origin !== "framework") sh += '<span class="chip proj">project</span>';
+    if (s.agents.length) sh += '<span class="chip" title="agents: ' + esc(s.agents.join(", ")) + '">' + esc(s.agents.join(", ")) + "</span>";
+    sh += "</span></div>";
+  });
+  $("skills").innerHTML = sh;
+
+  var mh = "";
+  state.mcp.forEach(function (m) {
+    var checked = desired.mcp[m.id] !== undefined ? desired.mcp[m.id] : m.installed;
+    mh += '<div class="item mcp">'
+      + '<input type="checkbox" id="mc-' + esc(m.id) + '"' + (checked ? " checked" : "")
+      + (acting ? " disabled" : "") + ' data-mcp="' + esc(m.id) + '">'
+      + '<label class="name" for="mc-' + esc(m.id) + '">' + esc(m.id) + "</label>"
+      + '<span class="meta"><span class="chip" title="' + esc(m.role + " · " + m.package + "@" + m.pin) + '">'
+      + esc(m.role) + " · " + esc(m.package) + "@" + esc(m.pin) + "</span></span>"
+      + '<span class="env">';
+    m.env.forEach(function (e) {
+      mh += '<span class="envk" title="' + (e.filled ? "filled" : "empty") + '"><span class="dot ' + (e.filled ? "on" : "") + '"></span>' + esc(e.name) + "</span>";
+    });
+    mh += "</span></div>";
+  });
+  $("mcp").innerHTML = mh;
+
+  /* Repos checklist: connected set of the workspace. Mandatory repos are locked;
+     adding an uncovered repo scaffolds its descriptor skeleton into the pack. */
+  var rh = "";
+  (state.repos || []).forEach(function (r) {
+    var checked = desired.repos[r.name] !== undefined ? desired.repos[r.name] : r.connected;
+    rh += '<div class="item">'
+      + '<input type="checkbox" id="rp-' + esc(r.name) + '"' + (checked ? " checked" : "")
+      + (r.mandatory || acting ? " disabled" : "") + ' data-repo="' + esc(r.name) + '"'
+      + (r.mandatory ? ' title="mandatory in this deployment — locked"' : "") + '>'
+      + '<label class="name" for="rp-' + esc(r.name) + '" title="' + esc(r.path) + '">' + esc(r.name) + "</label>"
+      + '<span class="meta">';
+    if (r.mandatory) rh += '<span class="chip proj">mandatory</span>';
+    if (r.role) rh += '<span class="chip" title="' + esc(r.role) + '">' + esc(r.role) + "</span>";
+    if (r.skeleton) rh += '<span class="chip excl" title="descriptor is an unfilled skeleton — distill it (see its embedded brief), then commit the pack">skeleton — distill</span>';
+    else if (r.descriptorFiles > 0) rh += '<span class="chip">' + r.descriptorFiles + ' doc' + (r.descriptorFiles > 1 ? "s" : "") + "</span>";
+    else if (checked && !r.connected) rh += '<span class="chip excl" title="the pack has no descriptors for this repo — connecting scaffolds a skeleton into the pack">will scaffold</span>';
+    else if (r.connected) rh += '<span class="chip excl" title="no descriptors in the pack — run: node ui repo-scaffold">no descriptor</span>';
+    rh += "</span></div>";
+  });
+  $("repos").innerHTML = rh || '<div class="placeholder" style="padding:8px 11px">no repos found</div>';
+
+  var d = diff();
+  var n = d.skills.enable.length + d.skills.disable.length + d.mcp.enable.length + d.mcp.disable.length
+    + d.repos.connect.length + d.repos.disconnect.length + d.harness.enable.length + d.harness.disable.length;
+  $("btnApply").disabled = acting || n === 0;
+  $("btnApply").classList.toggle("primary", !acting && n > 0);
+  var ph = "";
+  d.harness.enable.map(function (x) { return "harness:" + x; })
+    .concat(d.skills.enable)
+    .concat(d.mcp.enable.map(function (x) { return "mcp:" + x; }))
+    .concat(d.repos.connect.map(function (x) { return "repo:" + x.split("/").pop(); }))
+    .forEach(function (x) { ph += '<span class="add">+' + esc(x) + "</span>"; });
+  d.harness.disable.map(function (x) { return "harness:" + x; })
+    .concat(d.skills.disable)
+    .concat(d.mcp.disable.map(function (x) { return "mcp:" + x; }))
+    .concat(d.repos.disconnect.map(function (x) { return "repo:" + x; }))
+    .forEach(function (x) { ph += '<span class="del">&minus;' + esc(x) + "</span>"; });
+  $("pending").innerHTML = ph;
+
+  renderDocs();
+
+  Array.prototype.forEach.call(document.querySelectorAll("input[data-skill]"), function (el) {
+    el.onchange = function () { desired.skills[el.dataset.skill] = el.checked; render(); };
+  });
+  Array.prototype.forEach.call(document.querySelectorAll("input[data-mcp]"), function (el) {
+    el.onchange = function () { desired.mcp[el.dataset.mcp] = el.checked; render(); };
+  });
+  Array.prototype.forEach.call(document.querySelectorAll("input[data-repo]"), function (el) {
+    el.onchange = function () { desired.repos[el.dataset.repo] = el.checked; render(); };
+  });
+  Array.prototype.forEach.call(document.querySelectorAll("input[data-harness]"), function (el) {
+    el.onchange = function () { desired.harness[el.dataset.harness] = el.checked; render(); };
+  });
+}
+
+function load() {
+  return fetch("/api/state").then(function (r) { return r.json(); }).then(function (s) {
+    if (s.error) { logLine("state error: " + s.error); return; }
+    state = s; render();
+  }).catch(function (e) { logLine("state fetch failed: " + e); });
+}
+
+function post(p, body) {
+  return fetch(p, { method: "POST", headers: { "content-type": "application/json", "x-taut-token": TOKEN },
+    body: JSON.stringify(body || {}) }).then(function (r) { return r.json(); });
+}
+
+function act(name, p, body) {
+  if (acting) return;
+  acting = true; render();
+  logLine("── " + name + " ──");
+  post(p, body).then(function (r) {
+    logLine(r.log || r.error || JSON.stringify(r));
+    logLine(r.ok ? "✔ " + name + " done" : "✖ " + name + " FAILED");
+    desired = { skills: {}, mcp: {}, repos: {}, harness: {} };
+  }).catch(function (e) { logLine("✖ " + name + " failed: " + e); })
+    .then(function () { acting = false; return load(); });
+}
+
+$("btnRepair").onclick = function () { act("repair", "/api/repair"); };
+$("btnCheck").onclick = function () { act("check", "/api/check"); };
+$("btnUpdate").onclick = function () { act("update", "/api/update"); };
+$("btnUpdateData").onclick = function () { act("update data", "/api/update", { dataOnly: true }); };
+$("btnUpdateFrom").onclick = function () { act("refresh deployment", "/api/update", { fromDeployment: true }); };
+$("btnMode").onclick = function () {
+  act("mode", "/api/apply", { mode: state && state.mode === "strict" ? "normal" : "strict" });
+};
+$("btnApply").onclick = function () { act("apply", "/api/apply", diff()); };
+
+load().then(function () {
+  var tab = location.hash === "#docs" ? "docs" : location.hash === "#memory" ? "memory" : "control";
+  switchTab(tab);
+});
+setInterval(function () { if (!acting) load(); }, 5000);
+</script></body></html>

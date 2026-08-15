@@ -1,0 +1,62 @@
+{
+  "$comment": "TAUT catalog — MCP servers as DATA. serverKey MUST match the tool-name namespace the artifacts reference (skills/agents carry mcp__<serverKey>__*); tools[] are the concrete names the mcp-docs capability branches use — keep them in sync with the sources; version pins are the catalog author's responsibility (verify against the upstream registry when bumping).",
+  "servers": {
+    "jira": {
+      "role": "tracker",
+      "serverKey": "atlassian",
+      "package": "mcp-atlassian",
+      "pin": "0.23.0",
+      "command": "uvx",
+      "args": [
+        "mcp-atlassian==0.23.0"
+      ],
+      "env": [
+        "JIRA_URL",
+        "JIRA_USERNAME",
+        "JIRA_API_TOKEN"
+      ],
+      "fixedEnv": {
+        "READ_ONLY_MODE": "true"
+      }
+    },
+    "context7": {
+      "role": "docs",
+      "serverKey": "context7",
+      "package": "@upstash/context7-mcp",
+      "pin": "4.0.2",
+      "command": "npx",
+      "args": [
+        "-y",
+        "@upstash/context7-mcp@4.0.2"
+      ],
+      "env": [
+        "CONTEXT7_API_KEY"
+      ],
+      "fixedEnv": {},
+      "tools": [
+        "mcp__context7__resolve-library-id",
+        "mcp__context7__query-docs"
+      ],
+      "usage": "Use it PROACTIVELY: the FIRST stop for any library/framework API question (`resolve-library-id` → `query-docs`); web search is the fallback, not the default."
+    }
+  },
+  "envHelp": {
+    "JIRA_URL": [
+      "Base URL of your Jira site.",
+      "example: https://your-company.atlassian.net",
+      "Jira Server/DC: https://jira.your-company.com (then auth via JIRA_PERSONAL_TOKEN instead of USERNAME+API_TOKEN)"
+    ],
+    "JIRA_USERNAME": [
+      "Your Atlassian account email (Cloud API-token auth).",
+      "example: jan.novak@your-company.com"
+    ],
+    "JIRA_API_TOKEN": [
+      "API token created at https://id.atlassian.com/manage-profile/security/api-tokens",
+      "example: ATATT3xFfGF0abc...  (long string; keep secret, never commit)"
+    ],
+    "CONTEXT7_API_KEY": [
+      "Optional — higher rate limits. Create at https://context7.com/dashboard",
+      "leave empty to run without a key"
+    ]
+  }
+}

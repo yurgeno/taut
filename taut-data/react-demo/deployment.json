@@ -1,0 +1,52 @@
+{
+  "$comment": "TUTORIAL deployment - a one-repo React landscape with a three-stage flow (analyze -> implement -> review). docs/TUTORIAL.md in the engine repo builds this project file by file; every key here is explained in docs/PACK.md §6. Structural keys (name/description/repos/mode) are consumed by setup; everything under `manifest` passes VERBATIM into the generated workspace manifest.json.",
+  "name": "react-demo",
+  "description": "Tutorial: analyze -> implement -> review flow for a single React SPA (fictional repo react-app)",
+  "repos": {
+    "$comment": "The REPO MAP. `known` lists every repo this deployment understands - artifacts may bind to these names, and a repos/<name>/ descriptor folder must match one. An additional `mandatory: [..]` list (not used here) would lock repos into every workspace of this deployment. react-app is FICTIONAL: create a stub folder next to your workspace to try the tutorial, or point the map at your own repo.",
+    "known": {
+      "react-app": { "role": "React 18 + Vite SPA - the product under work" }
+    }
+  },
+  "manifest": {
+    "flow": {
+      "note": "Values the flow skills read at run time. No tracker here - tasks arrive in chat; a real deployment would add flow.tracker (ticket patterns, label-to-repo routing - see docs/PACK.md §6.3).",
+      "branch": { "pattern": "feature/*", "agentCreate": "forbidden" }
+    },
+    "runtimeTiers": {
+      "note": "Cost-ordered runtime ladder: pick the LOWEST tier that answers the question, climb only with a reason. The dev-server rung names its runbook by file name.",
+      "ladder": [
+        { "tier": "static", "how": "read the code - no runtime needed" },
+        { "tier": "dev-server", "how": "Vite dev server, recipe in the runbook", "runbook": "dev-server" }
+      ]
+    },
+    "modelTiers": {
+      "note": "The MODEL PROFILE: which model, effort and context width per harness, for which kind of work. sessionTier pins the ORCHESTRATOR session itself - it renders into each enabled harness's session config (.claude/settings.json model/effortLevel; .codex/config.toml model/model_reasoning_effort); agents pin their tier via frontmatter `model:` and the ladder maps the pin to each harness's value. rolePolicy documents which agent role sits on which tier - keep it in step with the frontmatter pins.",
+      "sessionTier": "frontier",
+      "ladder": [
+        {
+          "tier": "cheap",
+          "useWhen": "mechanical work - file moves, catalog reads, formatting",
+          "models": { "claude-code": "haiku", "codex": "gpt-5.6-luna" },
+          "reasoningEffort": { "claude-code": "low", "codex": "low" }
+        },
+        {
+          "tier": "mid",
+          "useWhen": "bounded analysis over known structure - reading the task, mapping the change surface",
+          "models": { "claude-code": "sonnet", "codex": "gpt-5.6-terra" },
+          "reasoningEffort": { "claude-code": "medium", "codex": "medium" }
+        },
+        {
+          "tier": "frontier",
+          "useWhen": "writing and reviewing code; the SESSION default",
+          "models": { "claude-code": "opus", "codex": "gpt-5.6" },
+          "reasoningEffort": { "claude-code": "high", "codex": "high" }
+        }
+      ],
+      "rolePolicy": {
+        "frontier": ["implementer", "reviewer"],
+        "mid": ["analyst"]
+      }
+    }
+  }
+}

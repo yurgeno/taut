@@ -1,0 +1,8 @@
+.DS_Store
+.test-tmp*/
+node_modules/
+# Local working instructions for agent sessions in this clone — never published.
+# Anchored to the repo root: the example pack legitimately ships CLAUDE.md descriptors.
+/CLAUDE.md
+/CLAUDE.local.md
+/.claude/

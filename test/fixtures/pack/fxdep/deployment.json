@@ -1,0 +1,43 @@
+{
+  "$comment": "Fixture deployment - exercises the full profile surface with generic names.",
+  "name": "fxdep",
+  "description": "Fixture deployment - full profile surface",
+  "repos": {
+    "mandatory": ["repo-core", "repo-svc"],
+    "known": {
+      "repo-core": { "role": "frontend SPA (fixture)" },
+      "repo-svc": { "role": "backend service" },
+      "repo-pdf": { "role": "pdf service" },
+      "repo-opt": { "role": "optional member" },
+      "repo-guard": { "role": "guarded migrations", "guards": ["owner-prompt"] }
+    }
+  },
+  "manifest": {
+    "flow": {
+      "tracker": { "ticketPattern": "FX-\\d+", "labels": { "knownRepoLabels": ["repo-core", "repo-svc"] } },
+      "scm": { "group": "fx-group" },
+      "branch": { "pattern": "feature/FX-*", "agentCreate": "forbidden" }
+    },
+    "defaults": { "writeMode": "patch" },
+    "runtimeTiers": {
+      "note": "cost-ordered ladder (fixture): pick the lowest sufficient tier",
+      "ladder": [
+        { "tier": "static", "how": "read code only" },
+        { "tier": "spa-mock", "how": "skill fx-spa", "runbook": "spa-mock" },
+        { "tier": "stack", "how": "skill fx-stack", "runbook": "stack-basic" }
+      ]
+    },
+    "modelTiers": {
+      "sessionTier": "frontier",
+      "ladder": [
+        { "tier": "work", "useWhen": "bounded recon (fixture)", "models": { "claude-code": "sonnet", "codex": "gpt-5.6-terra" }, "reasoningEffort": { "claude-code": "medium", "codex": "medium" } },
+        { "tier": "frontier", "useWhen": "high-stakes reasoning (fixture)", "models": { "claude-code": "opus", "codex": "gpt-5.6" }, "reasoningEffort": { "claude-code": "high", "codex": "high" } }
+      ]
+    },
+    "stacks": {
+      "basic": { "description": "core backend pair", "runbook": "stack-basic", "infra": ["repo-svc"], "services": ["repo-svc"], "spa": "repo-core" },
+      "pdf": { "description": "pdf rendering chain", "runbook": "stack-pdf", "services": ["repo-pdf"] }
+    },
+    "launcher": { "note": "full launcher stack (fixture placeholder)" }
+  }
+}

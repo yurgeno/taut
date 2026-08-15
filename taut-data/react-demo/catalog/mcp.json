@@ -1,0 +1,23 @@
+{
+  "$comment": "PROJECT-level MCP catalog: merges OVER the pack-level catalog/mcp.json (project wins per server id / env-help key). react-demo needs only the docs role - context7. A project that needs nothing beyond the shared catalog can omit this file entirely.",
+  "servers": {
+    "context7": {
+      "role": "docs",
+      "serverKey": "context7",
+      "package": "@upstash/context7-mcp",
+      "pin": "4.0.2",
+      "command": "npx",
+      "args": ["-y", "@upstash/context7-mcp@4.0.2"],
+      "env": ["CONTEXT7_API_KEY"],
+      "fixedEnv": {},
+      "tools": ["mcp__context7__resolve-library-id", "mcp__context7__query-docs"],
+      "usage": "Use it PROACTIVELY for any library/framework API question (resolve-library-id -> query-docs); web search is the fallback, not the default."
+    }
+  },
+  "envHelp": {
+    "CONTEXT7_API_KEY": [
+      "API key for the context7 docs service.",
+      "Create one in the dashboard: https://context7.com/dashboard"
+    ]
+  }
+}
