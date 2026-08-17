@@ -1,0 +1,24 @@
+name: Feature request
+description: A capability the engine should have
+labels: [enhancement]
+body:
+  - type: textarea
+    id: problem
+    attributes:
+      label: The problem
+      description: What you are trying to do and where TAUT currently stops you.
+    validations:
+      required: true
+  - type: textarea
+    id: proposal
+    attributes:
+      label: Proposed behavior
+    validations:
+      required: true
+  - type: textarea
+    id: alternatives
+    attributes:
+      label: Alternatives considered
+      description: >-
+        Note: if it is project-specific content (a skill, a law, a runbook, deployment
+        values), it belongs in a data pack, not in the engine — see docs/PACK.md.

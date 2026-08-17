@@ -1,6 +1,10 @@
 # TAUT — Toolchain Actualization Under Trust
 
 [![test](https://github.com/yurgeno/taut/actions/workflows/test.yml/badge.svg)](https://github.com/yurgeno/taut/actions/workflows/test.yml)
+[![release](https://img.shields.io/github/v/release/yurgeno/taut)](https://github.com/yurgeno/taut/releases)
+[![license](https://img.shields.io/badge/license-Apache--2.0-blue)](LICENSE)
+![node](https://img.shields.io/badge/node-%E2%89%A5%2024-339933?logo=nodedotjs&logoColor=white)
+![runtime deps](https://img.shields.io/badge/runtime%20deps-0-success)
 
 Compile, actualize and guard **agent workspaces**: turn versioned sources (skills,
 subagents, laws, runbooks, per-repo knowledge, MCP pins, model profiles) into a
@@ -12,6 +16,11 @@ harness-neutral, and compiled per harness through adapters — currently
 
 Zero runtime dependencies. The compiler is TypeScript executed natively by Node ≥ 24
 (type stripping — no build step); compiled workspaces themselves run on any Node.
+
+![The acting panel](docs/assets/panel.png)
+*The acting panel (`node ui`): actualization badges, harness switches, skill / MCP /
+repo checklists applied as one batched recompile, update / repair / strict-mode
+controls — for every workspace, whatever pack it was compiled from.*
 
 ## Why
 
@@ -33,6 +42,29 @@ discipline the team agreed on. TAUT treats the workspace as a **build artifact**
 - **Generic core, values in the pack.** The engine ships no content and hardcodes no
   instance names. Everything project-specific — repo maps, laws, ticket patterns, model
   ladders, runbooks — lives in the pack as VALUES and derives parametrically.
+
+## How it works
+
+```mermaid
+flowchart LR
+    subgraph inputs["versioned inputs"]
+        E["engine<br/>(this repo)"]
+        P["data pack<br/>skills · agents · laws<br/>runbooks · repo docs · MCP pins"]
+    end
+    E -- "taut setup / update" --> W
+    P -- "compiled per harness" --> W
+    subgraph W["workspace — a build artifact"]
+        L["taut.lock<br/>engine + pack pins,<br/>sha256 per file"]
+        G["integrity gate<br/>blocks out-of-pipeline edits<br/>at invocation"]
+        U["acting panel<br/>node ui"]
+    end
+    W -. "symlink" .-> M[("instance memory<br/>survives recompiles")]
+```
+
+Both inputs are ordinary git repositories; the lock records exactly which commit of
+each a workspace runs. `status` measures the distance to their HEADs, `update` re-pins
+deliberately, `repair` restores the recorded state — and the gate refuses whatever was
+edited around the pipeline.
 
 ## Features
 
@@ -127,6 +159,13 @@ npm install && npm test
 | `gate/mcp-launch.mjs` | the SHIPPED MCP launcher (reads `.taut/local.env` at server start) |
 | `taut-data/` | the example data pack (the `react-demo` tutorial project) — resolver fallback, compiled by an e2e test |
 | `test/` | `node --test` suites, each in its own sandbox; `npm test` = typecheck + suite |
+
+## Contributing
+
+Issues and pull requests are welcome — [CONTRIBUTING.md](CONTRIBUTING.md) covers the
+dev setup and the few ground rules (the big one: the engine keeps its **zero runtime
+dependencies**). `npm test` — typecheck plus the full suite, each in its own sandbox —
+must stay green.
 
 ## Security
 

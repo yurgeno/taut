@@ -10,13 +10,19 @@
     "url": "https://github.com/yurgeno/taut.git"
   },
   "keywords": [
+    "ai",
+    "ai-agents",
     "agents",
+    "llm",
+    "agent-framework",
     "claude-code",
     "codex",
     "workspace",
     "compiler",
     "integrity",
     "mcp",
+    "model-context-protocol",
+    "developer-tools",
     "toolchain"
   ],
   "bin": {

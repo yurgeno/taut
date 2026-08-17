@@ -1,0 +1,5 @@
+blank_issues_enabled: true
+contact_links:
+  - name: Security vulnerability
+    url: https://github.com/yurgeno/taut/blob/master/SECURITY.md
+    about: Gate bypass, strict-mode escape, panel token guard — report privately, not as an issue.

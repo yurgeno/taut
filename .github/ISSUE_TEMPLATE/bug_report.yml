@@ -1,0 +1,52 @@
+name: Bug report
+description: Something the engine, the gate, or the panel does wrong
+labels: [bug]
+body:
+  - type: textarea
+    id: what
+    attributes:
+      label: What happened
+      description: What you did, what you got. Paste the exact command and output.
+      placeholder: |
+        node taut.mjs setup --data ./my-pack
+        → FAILED: ...
+    validations:
+      required: true
+  - type: textarea
+    id: expected
+    attributes:
+      label: What you expected
+    validations:
+      required: true
+  - type: textarea
+    id: repro
+    attributes:
+      label: Minimal reproduction
+      description: >-
+        Smallest pack / answers file / sequence of commands that shows it. The bundled
+        example pack (taut-data/) is a good base.
+  - type: input
+    id: version
+    attributes:
+      label: TAUT commit or release
+      placeholder: v0.1.0
+    validations:
+      required: true
+  - type: input
+    id: node
+    attributes:
+      label: Node version and OS
+      placeholder: node 24.2.0 · macOS 15
+    validations:
+      required: true
+  - type: input
+    id: harness
+    attributes:
+      label: Harness(es) enabled in the workspace
+      placeholder: claude-code + codex
+  - type: markdown
+    attributes:
+      value: >-
+        **Found a way around the integrity gate, strict mode, or the panel's token
+        guard?** That is a vulnerability — please report it privately per
+        [SECURITY.md](../blob/master/SECURITY.md) instead of filing an issue.
