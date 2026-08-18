@@ -4,6 +4,7 @@
 [![release](https://img.shields.io/github/v/release/yurgeno/taut)](https://github.com/yurgeno/taut/releases)
 [![license](https://img.shields.io/badge/license-Apache--2.0-blue)](LICENSE)
 ![node](https://img.shields.io/badge/node-%E2%89%A5%2024-339933?logo=nodedotjs&logoColor=white)
+![platforms](https://img.shields.io/badge/platforms-linux%20%7C%20macos-informational)
 ![runtime deps](https://img.shields.io/badge/runtime%20deps-0-success)
 
 Compile, actualize and guard **agent workspaces**: turn versioned sources (skills,
@@ -16,6 +17,8 @@ harness-neutral, and compiled per harness through adapters — currently
 
 Zero runtime dependencies. The compiler is TypeScript executed natively by Node ≥ 24
 (type stripping — no build step); compiled workspaces themselves run on any Node.
+**Linux and macOS only** — the framework targets and is tested on these two platforms;
+Windows is not supported.
 
 ![The acting panel](docs/assets/panel.png)
 *The acting panel (`node ui`): actualization badges, harness switches, skill / MCP /
@@ -99,7 +102,8 @@ edited around the pipeline.
 
 ## Quickstart
 
-Requires Node ≥ 24 (for the compiler only).
+Requires Node ≥ 24 (for the compiler only) on Linux or macOS — the only supported and
+tested platforms.
 
 ```bash
 git clone https://github.com/yurgeno/taut.git

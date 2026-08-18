@@ -9,7 +9,8 @@ compiles it on every `npm test`, so the tutorial cannot drift from reality.
 
 Reference docs as you go: [PACK.md](PACK.md) (every element kind + the full
 `deployment.json` reference) and [HANDBOOK.md](HANDBOOK.md) (operating the compiled
-workspace).
+workspace). Prerequisites: Node ≥ 24 on Linux or macOS — the only supported and
+tested platforms.
 
 ## 0. The mental model
 

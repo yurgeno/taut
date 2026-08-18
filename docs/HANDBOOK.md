@@ -16,6 +16,9 @@ blocked, not silently adopted.
 
 ## 2. Setup
 
+Linux and macOS only (the framework is developed and tested on these two platforms;
+Windows is not supported); Node ≥ 24 for the compiler.
+
 ```bash
 node taut.mjs setup                # interactive
 node taut.mjs setup --answers a.json --yes   # non-interactive
@@ -28,7 +31,9 @@ harness(es) — interactively one adapter or all of them; an arbitrary subset co
 an answers file or a later `apply` → Atlas integration (opt-in; enabling
 asks for the Atlas engine folder next — an empty or wrong folder aborts setup; if you
 have never heard of Atlas, keep the preselected `disable`) → workspace mode
-(`normal`/`strict`) → skills → MCP servers.
+(`normal`/`strict`) → session language (ONLY when the deployment config declares a
+choice via `defaults.languages.chat = {options[], default}` — a flat value never asks;
+see [PACK.md](PACK.md) §6.3) → skills → MCP servers.
 
 Pack resolution, first hit wins: `--data` / answers `data` → the workspace's own
 `.taut/local.json` binding → `TAUT_DATA` env → `<workspace-parent>/taut-data` (the
@@ -38,7 +43,9 @@ the bundled `taut-data/` example pack.
 Non-interactive answers file keys: `deployment` (`<name>` or `"none"`), `workspace`,
 `repos` (path list or `"scan"`), `harnesses` (any subset of the supported set,
 today `["claude-code","codex"]`), `atlas` (the Atlas engine folder to enable the
-integration; omitted/false = disabled — a bare `true` fails), `mode`, `skills`
+integration; omitted/false = disabled — a bare `true` fails), `mode`, `chatLanguage`
+(the session-language code; accepted only when the deployment declares a choice —
+omitted, the declared default applies), `skills`
 (list or `"all"`), `mcp` (list or `"all"`), `data`.
 
 ## 3. Workspace anatomy

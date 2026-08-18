@@ -13,8 +13,10 @@ npm test           # tsc --noEmit && node --test
 ```
 
 Node ≥ 24 is required: the compiler is TypeScript executed natively via type stripping,
-`tsc` is only the checker. Every test suite builds its own sandbox (temp workspaces,
-throwaway git repos), so the suite runs anywhere and leaves nothing behind.
+`tsc` is only the checker. Linux and macOS are the only supported platforms —
+development, CI and the test suite run and are verified on these two; Windows is not
+supported. Every test suite builds its own sandbox (temp workspaces,
+throwaway git repos), so the suite runs from any checkout and leaves nothing behind.
 
 ## Ground rules
 
