@@ -328,6 +328,28 @@ test('session language: a FLAT declaration never asks and cannot be overridden',
     /declares no session-language choice/);
 });
 
+test('session language: the "auto" sentinel renders the mirror-the-developer instruction, asks nothing', async () => {
+  const autoPack = await makePack(path.join(TMP, 'pack-langauto'));
+  const depPath = path.join(autoPack, 'fxdep', 'deployment.json');
+  const dep = JSON.parse(await fs.readFile(depPath, 'utf8'));
+  dep.manifest.defaults.languages = { documents: 'en', chat: 'auto', tracker: 'cs' };
+  await fs.writeFile(depPath, JSON.stringify(dep, null, 2));
+  await commitAll(autoPack, 'auto lang');
+  const root = path.join(TMP, 'profroot');
+  const repos = [path.join(root, 'repo-core'), path.join(root, 'repo-svc')];
+  // No chatLanguage key needed — auto is a flat value, setup never asks.
+  const { ws } = await setup('lang-auto', {
+    deployment: 'fxdep', harness: 'claude-code', atlas: false, skills: 'all', mcp: [], repos, data: autoPack,
+  });
+  const m = JSON.parse(await fs.readFile(path.join(ws, 'manifest.json'), 'utf8'));
+  assert.equal(m.defaults.languages.chat, 'auto', 'sentinel passes through as the flat value');
+  const instr = await fs.readFile(path.join(ws, 'CLAUDE.md'), 'utf8');
+  assert.match(instr, /Session language: mirror the developer/);
+  assert.match(instr, /Mirror the\n?\s*person, not the data/);
+  await assert.rejects(run(process.execPath, [CLI, 'apply', '--workspace', ws, '--chat-language', 'en']),
+    /declares no session-language choice/);
+});
+
 test('atlas: the enabling value IS the engine folder — bare true and a wrong path abort setup', async () => {
   await assert.rejects(setup('atlas-bare', {
     harness: 'claude-code', atlas: true, skills: 'all', mcp: [], repos: [repoB],

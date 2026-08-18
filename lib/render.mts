@@ -237,14 +237,21 @@ export function renderInstructions(cfg: Cfg, { forCodex }: { forCodex: boolean }
   // session-communication language: chosen at setup when the deployment declares a
   // choice (cfg.chatLanguage set), otherwise fixed by the deployment.
   const langs = m.defaults?.languages;
+  // `chat: "auto"` = adaptive: no fixed code exists — the session MIRRORS the language
+  // the developer writes in. The instruction names the failure mode explicitly (pasted
+  // data must not flip the language); a fixed code renders the deterministic variant.
   const languagesBlock = langs && typeof langs.chat === 'string' ? `
 ## Languages
 
-- **Session language: ${langName(langs.chat)}** (\`${langs.chat}\`) — ALL in-session
+${langs.chat === 'auto' ? `- **Session language: mirror the developer.** Reply in the language the developer
+  WRITES in chat — ALL in-session communication (questions, findings, summaries,
+  reports in chat) follows it, switching whenever the developer switches. Mirror the
+  person, not the data: pasted or quoted material (tickets, logs, code, docs) never
+  changes the reply language.` : `- **Session language: ${langName(langs.chat)}** (\`${langs.chat}\`) — ALL in-session
   communication with the developer (questions, findings, summaries, reports in chat) is
   in this language${cfg.chatLanguage != null
     ? '; chosen at setup — change with `node ui apply --chat-language <code>`'
-    : ' (fixed by the deployment)'}.
+    : ' (fixed by the deployment)'}.`}
 ${typeof langs.documents === 'string' ? `- Written artifacts (specs, plans, reviews, runbooks, memory, instructions for other
   agents): ${langName(langs.documents)} — fixed, regardless of the session language.\n` : ''}${typeof langs.tracker === 'string' ? `- Tracker content: ${langName(langs.tracker)} — tickets are read and tracker-bound
   drafts are written in it (delivered in chat only).\n` : ''}` : '';

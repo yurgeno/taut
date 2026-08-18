@@ -215,7 +215,9 @@ apply   Deliberate per-artifact TOGGLES on an existing workspace, ONE recompile 
         choice (defaults.languages.chat = {options[], default} — asked once at setup);
         one recompile re-renders the instructions and the flat manifest value. A
         deployment that fixes the language (flat value) never asks and cannot be
-        overridden here.
+        overridden here. The flat value "auto" is the adaptive variant: the generated
+        instructions tell the session to MIRROR the language the developer writes in
+        (pasted data never switches it) — nothing to configure, nothing to override.
 repo-scaffold  AUTO-INIT of missing repo descriptors (the pack is checked first —
         initialization happens only for what does not exist). Repo descriptors are
         per-repo working knowledge shipped from the pack's <project>/repos/<repo>/*.md
