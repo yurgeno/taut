@@ -25,6 +25,7 @@ export interface CliOpts {
   dataOnly?: boolean;
   port?: number;
   mode?: string;
+  chatLanguage?: string;
   help?: boolean;
 }
 
@@ -90,6 +91,11 @@ export interface Cfg {
   // enabled; null on legacy workspaces that recorded only the flag.
   atlasRoot?: string | null;
   mode: string;
+  // Session-communication language CHOSEN for this workspace — set only when the
+  // deployment declares a choice (defaults.languages.chat = {options[], default});
+  // null = the deployment fixes the language (flat value) or has none. The resolved
+  // code compiles into the manifest as the flat defaults.languages.chat.
+  chatLanguage?: string | null;
   skills: string[];
   skillsSelection: 'all' | 'custom';
   skillsExcluded: string[];

@@ -14,6 +14,14 @@ import type { McpServer } from './types.mts';
 // Framework root = the CORE repo root (parent of lib/).
 export const FW_ROOT = path.dirname(path.dirname(fileURLToPath(import.meta.url)));
 
+// Display names for common session-language codes (setup hints + rendered
+// instructions); an unlisted code renders as itself — never a failure.
+export const LANG_NAMES: Record<string, string> = {
+  en: 'English', ru: 'Russian', cs: 'Czech', de: 'German', fr: 'French',
+  es: 'Spanish', it: 'Italian', pl: 'Polish', sk: 'Slovak', uk: 'Ukrainian',
+};
+export const langName = (c: string): string => LANG_NAMES[c] ?? c;
+
 // ---------------------------------------------------------------- data pack seam
 
 // Resolution chain, first hit wins:

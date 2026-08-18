@@ -269,6 +269,65 @@ test('model profile: an unknown sessionTier fails the compile', async () => {
   }), /sessionTier "nope" names no ladder rung/);
 });
 
+test('session language: deployment-declared choice — default applies, answers override, apply switches, repair keeps', async () => {
+  const langPack = await makePack(path.join(TMP, 'pack-lang'));
+  const depPath = path.join(langPack, 'fxdep', 'deployment.json');
+  const dep = JSON.parse(await fs.readFile(depPath, 'utf8'));
+  dep.manifest.defaults.languages = { documents: 'en', chat: { options: ['ru', 'en', 'cs'], default: 'en' }, tracker: 'cs' };
+  await fs.writeFile(depPath, JSON.stringify(dep, null, 2));
+  await commitAll(langPack, 'lang choice');
+  const root = path.join(TMP, 'profroot');
+  const repos = [path.join(root, 'repo-core'), path.join(root, 'repo-svc')];
+  const base = { deployment: 'fxdep', harness: 'claude-code', atlas: false, skills: 'all', mcp: [], repos, data: langPack };
+
+  // No answer → the declared default compiles to the FLAT manifest value; fixed keys ride untouched.
+  const { ws } = await setup('lang-default', base);
+  let m = JSON.parse(await fs.readFile(path.join(ws, 'manifest.json'), 'utf8'));
+  assert.equal(m.defaults.languages.chat, 'en', 'default resolved to the flat code');
+  assert.equal(m.defaults.languages.tracker, 'cs', 'fixed keys pass through untouched');
+  const instr = await fs.readFile(path.join(ws, 'CLAUDE.md'), 'utf8');
+  assert.match(instr, /Session language: English/);
+  assert.match(instr, /chosen at setup/);
+
+  // Explicit answer wins; an unknown code fails the setup.
+  const { ws: wsRu } = await setup('lang-ru', { ...base, chatLanguage: 'ru' });
+  m = JSON.parse(await fs.readFile(path.join(wsRu, 'manifest.json'), 'utf8'));
+  assert.equal(m.defaults.languages.chat, 'ru');
+  assert.match(await fs.readFile(path.join(wsRu, 'CLAUDE.md'), 'utf8'), /Session language: Russian/);
+  await assert.rejects(setup('lang-bad', { ...base, chatLanguage: 'de' }), /unknown session language "de"/);
+
+  // apply --chat-language recompiles to the new choice; unknown code refused; repair keeps it.
+  await run(process.execPath, [CLI, 'apply', '--workspace', wsRu, '--chat-language', 'cs']);
+  m = JSON.parse(await fs.readFile(path.join(wsRu, 'manifest.json'), 'utf8'));
+  assert.equal(m.defaults.languages.chat, 'cs');
+  assert.match(await fs.readFile(path.join(wsRu, 'CLAUDE.md'), 'utf8'), /Session language: Czech/);
+  await assert.rejects(run(process.execPath, [CLI, 'apply', '--workspace', wsRu, '--chat-language', 'de']),
+    /unknown session language "de"/);
+  await run(process.execPath, [CLI, 'repair', '--workspace', wsRu]);
+  m = JSON.parse(await fs.readFile(path.join(wsRu, 'manifest.json'), 'utf8'));
+  assert.equal(m.defaults.languages.chat, 'cs', 'repair keeps the chosen language');
+  await run(process.execPath, [CLI, 'verify', '--workspace', wsRu]);
+});
+
+test('session language: a FLAT declaration never asks and cannot be overridden', async () => {
+  const flatPack = await makePack(path.join(TMP, 'pack-langflat'));
+  const depPath = path.join(flatPack, 'fxdep', 'deployment.json');
+  const dep = JSON.parse(await fs.readFile(depPath, 'utf8'));
+  dep.manifest.defaults.languages = { documents: 'en', chat: 'en', tracker: 'cs' };
+  await fs.writeFile(depPath, JSON.stringify(dep, null, 2));
+  await commitAll(flatPack, 'flat lang');
+  const root = path.join(TMP, 'profroot');
+  const repos = [path.join(root, 'repo-core'), path.join(root, 'repo-svc')];
+  const base = { deployment: 'fxdep', harness: 'claude-code', atlas: false, skills: 'all', mcp: [], repos, data: flatPack };
+  const { ws } = await setup('lang-flat', base);
+  const m = JSON.parse(await fs.readFile(path.join(ws, 'manifest.json'), 'utf8'));
+  assert.equal(m.defaults.languages.chat, 'en', 'flat value passes through');
+  assert.match(await fs.readFile(path.join(ws, 'CLAUDE.md'), 'utf8'), /fixed by the deployment/);
+  await assert.rejects(setup('lang-flat2', { ...base, chatLanguage: 'ru' }), /declares no session-language choice/);
+  await assert.rejects(run(process.execPath, [CLI, 'apply', '--workspace', ws, '--chat-language', 'ru']),
+    /declares no session-language choice/);
+});
+
 test('atlas: the enabling value IS the engine folder — bare true and a wrong path abort setup', async () => {
   await assert.rejects(setup('atlas-bare', {
     harness: 'claude-code', atlas: true, skills: 'all', mcp: [], repos: [repoB],

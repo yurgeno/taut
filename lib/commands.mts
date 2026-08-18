@@ -13,6 +13,7 @@ import { bold, dim, exists, expandHome, fail, gitInfo, gitInfoOwn, green, isComm
 import { atlasRequired, neededAgents } from './artifacts.mts';
 import { askText, banner } from './tui.mts';
 import { cfgFromWorkspace, gatherConfig, isConductorDir, listDeployments, normalizeHarnesses, relintRepoBindings } from './config.mts';
+import { chatChoice } from './manifest.mts';
 import { install, memoryRootFor, migrateLegacyLayout, scanMemberInstructionFiles } from './install.mts';
 import { verify, writeLock } from './lock.mts';
 import { scaffoldDescriptor } from './render.mts';
@@ -468,8 +469,9 @@ export async function cmdApply(opts: CliOpts): Promise<void> {
   const ws = path.resolve(expandHome(opts.workspace ?? process.cwd()));
   if (!await exists(path.join(ws, 'manifest.json'))) fail(`no manifest.json in ${ws} — not a TAUT workspace`);
   const total = opts.skillsOn.length + opts.skillsOff.length + opts.mcpOn.length + opts.mcpOff.length
-    + opts.reposOn.length + opts.reposOff.length + opts.harnessOn.length + opts.harnessOff.length + (opts.mode ? 1 : 0);
-  if (!total) fail('nothing to apply — pass --enable-skill/--disable-skill/--enable-mcp/--disable-mcp/--connect-repo/--disconnect-repo/--enable-harness/--disable-harness/--mode');
+    + opts.reposOn.length + opts.reposOff.length + opts.harnessOn.length + opts.harnessOff.length
+    + (opts.mode ? 1 : 0) + (opts.chatLanguage ? 1 : 0);
+  if (!total) fail('nothing to apply — pass --enable-skill/--disable-skill/--enable-mcp/--disable-mcp/--connect-repo/--disconnect-repo/--enable-harness/--disable-harness/--mode/--chat-language');
   await initDataFor({ explicit: opts.data ?? null, ws });
   const cfg = await cfgFromWorkspace(ws);
 
@@ -480,6 +482,18 @@ export async function cmdApply(opts: CliOpts): Promise<void> {
   if (opts.mode) {
     if (!['strict', 'normal'].includes(opts.mode)) fail(`unknown mode "${opts.mode}" (expected: strict, normal)`);
     cfg.mode = opts.mode;
+  }
+
+  // SESSION LANGUAGE change: valid only when the deployment declares a choice — the
+  // declaration is read from the LIVE pack config (the workspace manifest holds only the
+  // resolved flat value), so a pack that fixes the language cannot be overridden here.
+  if (opts.chatLanguage) {
+    const real = cfg.profile ? (await listDeployments()).find((d) => d.name === cfg.profile!.name) : null;
+    const choice = chatChoice(real?.manifest);
+    if (!choice) fail('the deployment declares no session-language choice (defaults.languages.chat is fixed) — --chat-language does not apply');
+    if (!choice.options.includes(opts.chatLanguage))
+      fail(`unknown session language "${opts.chatLanguage}" (options: ${choice.options.join(', ')})`);
+    cfg.chatLanguage = opts.chatLanguage;
   }
 
   // HARNESS toggles (the panel's harness switches): enable = the union render installs

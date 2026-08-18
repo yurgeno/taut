@@ -6,9 +6,10 @@ import path from 'node:path';
 import process from 'node:process';
 
 import {
-  HARNESSES, MCP_CATALOG, OWNED_MANIFEST_KEYS, initProject, requireData,
+  HARNESSES, MCP_CATALOG, OWNED_MANIFEST_KEYS, initProject, langName, requireData,
 } from './constants.mts';
 import { bold, dim, exists, expandHome, fail, green, readIfExists, yellow } from './util.mts';
+import { chatChoice } from './manifest.mts';
 import { atlasRequired, lintRepoBindings, loadCatalog, stageChain } from './artifacts.mts';
 import { askText, tuiSelect } from './tui.mts';
 import type { Cfg, Profile, Repo } from './types.mts';
@@ -125,7 +126,7 @@ export async function gatherConfig(answers: any, interactive: boolean): Promise<
   const cfg = {} as Cfg;
   const warnings: string[] = [];
   const need = (k: string) => fail(`missing config "${k}" (non-interactive run needs it in --answers)`);
-  const totalSteps = 7 + (deployments.length ? 1 : 0);
+  let totalSteps = 7 + (deployments.length ? 1 : 0);
   let stepNo = 0;
   const step = (t: string) => `Step ${++stepNo}/${totalSteps} · ${t}`;
 
@@ -151,6 +152,11 @@ export async function gatherConfig(answers: any, interactive: boolean): Promise<
     })), { summary: (v) => v.name });
   }
   if (deployments.length && stepNo === 0) stepNo = 1; // keep numbering when the step was answered
+  // A deployment-declared session-language choice adds ONE questionnaire step (asked
+  // exactly when declared — see the block after mode). Malformed declarations fail here,
+  // before any question runs.
+  const langChoice = chatChoice(cfg.profile?.manifest);
+  if (langChoice) totalSteps += 1;
   for (const k of Object.keys(cfg.profile?.manifest ?? {}))
     if (OWNED_MANIFEST_KEYS.has(k) && k !== 'flow')
       warnings.push(`deployment config "${cfg.profile!.name}": manifest.${k} is compiler-owned — ignored`);
@@ -301,6 +307,35 @@ export async function gatherConfig(answers: any, interactive: boolean): Promise<
   }
   if (!['strict', 'normal'].includes(cfg.mode)) fail(`unknown mode "${cfg.mode}" (expected: strict, normal)`);
 
+  // SESSION LANGUAGE — asked ONLY when the deployment declares a choice
+  // (defaults.languages.chat = {options[], default}); a flat value (or no deployment)
+  // fixes the language and setup never asks — the question set is deployment-authored
+  // config, not engine policy. The chosen code compiles into the manifest as the flat
+  // defaults.languages.chat every session reads.
+  if (!langChoice) {
+    if (answers.chatLanguage !== undefined)
+      fail('answers: chatLanguage given but the deployment declares no session-language choice (defaults.languages.chat is fixed)');
+    cfg.chatLanguage = null;
+  } else if (answers.chatLanguage !== undefined) {
+    const v = String(answers.chatLanguage);
+    if (!langChoice.options.includes(v)) fail(`unknown session language "${v}" (options: ${langChoice.options.join(', ')})`);
+    cfg.chatLanguage = v;
+    stepNo += 1;
+  } else if (!interactive) {
+    if (langChoice.def === undefined) need('chatLanguage');
+    cfg.chatLanguage = langChoice.def!;
+  } else {
+    // The declared default (when present) leads the list, so bare-enter picks it.
+    const ordered = langChoice.def !== undefined
+      ? [langChoice.def, ...langChoice.options.filter((c) => c !== langChoice.def)]
+      : langChoice.options;
+    cfg.chatLanguage = await tuiSelect(step('Session language (chat with the developer)'), ordered.map((c) => ({
+      label: langName(c),
+      value: c,
+      hint: c === langChoice.def ? `${c} · deployment default` : c,
+    })), { summary: (v) => `${langName(v)} (${v})` });
+  }
+
   // Skills — a flat checklist over the whole catalog (framework + the deployment's own
   // payload). The pool is narrowed by capability (`requires: [atlas]` without Atlas) and
   // by the repo lint; flow docs only supply ordering hints.
@@ -425,6 +460,11 @@ export async function cfgFromWorkspace(ws: string): Promise<Cfg> {
     atlas: Boolean(manifest.atlas?.enabled),
     atlasRoot: local.atlasRoot ?? null, // machine binding; legacy workspaces have none
     mode: manifest.mode ?? 'normal',
+    // The manifest carries the RESOLVED flat language; it counts as a live choice only
+    // when the real deployment (still) declares one — a pack with a fixed language (or
+    // an unreachable pack) reconstructs as null and the flat value passes through as-is.
+    chatLanguage: chatChoice(real?.manifest) && typeof manifest.defaults?.languages?.chat === 'string'
+      ? manifest.defaults.languages.chat : null,
     skills: manifest.skills,
     skillsSelection: manifest.skillsSelection ?? 'custom',
     skillsExcluded: manifest.skillsExcluded ?? [],

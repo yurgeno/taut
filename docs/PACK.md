@@ -158,6 +158,16 @@ The engine treats these as opaque values except at the named seams:
 - `modelTiers` — the MODEL PROFILE (§8). SEAMS: `sessionTier` renders into harness
   configs + the lock; the ladder maps agent pins into Codex TOML; single-harness
   compiles add flat per-rung values.
+- `defaults.languages` — the language policy (`{documents, chat, tracker}`; language
+  codes). SEAM on `chat` (the session-communication language): a flat code fixes it —
+  setup asks nothing; declaring `"chat": {"options": ["ru", "en", "cs"], "default":
+  "en"}` instead turns it into a SETUP QUESTION (one extra step, answered
+  non-interactively via answers `chatLanguage`, changed later with `taut apply
+  --chat-language <code>`). Either way the workspace manifest carries the resolved FLAT
+  code, and the generated instructions state the session language explicitly (a
+  `## Languages` block); `documents`/`tracker` always ride through untouched. The
+  question set thus lives in the PACK: a deployment that declares no choice is never
+  asked about languages.
 
 Anything else you put in the bag rides along untouched — deployment-specific values
 for your own skills are exactly what it is for.

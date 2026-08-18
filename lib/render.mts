@@ -4,7 +4,7 @@
 // they are installed byte-for-byte by lib/install.mts.
 import path from 'node:path';
 
-import { FRAMEWORK_OWNED_NOTE, MCP_CATALOG } from './constants.mts';
+import { FRAMEWORK_OWNED_NOTE, MCP_CATALOG, langName } from './constants.mts';
 import { stageChain } from './artifacts.mts';
 import { buildManifest, installedFlowDocs, rungEffort, sessionRung } from './manifest.mts';
 import type { Cfg, RepoDocFile } from './types.mts';
@@ -232,6 +232,22 @@ export function renderInstructions(cfg: Cfg, { forCodex }: { forCodex: boolean }
     : [];
   // Model policy: rendered only when the profile pins a session tier. Each harness's
   // instructions show ITS OWN column of the ladder.
+  // Language policy, from the RESOLVED manifest (defaults.languages) — rendered
+  // explicitly so a session obeys it without digging through the manifest. `chat` is the
+  // session-communication language: chosen at setup when the deployment declares a
+  // choice (cfg.chatLanguage set), otherwise fixed by the deployment.
+  const langs = m.defaults?.languages;
+  const languagesBlock = langs && typeof langs.chat === 'string' ? `
+## Languages
+
+- **Session language: ${langName(langs.chat)}** (\`${langs.chat}\`) — ALL in-session
+  communication with the developer (questions, findings, summaries, reports in chat) is
+  in this language${cfg.chatLanguage != null
+    ? '; chosen at setup — change with `node ui apply --chat-language <code>`'
+    : ' (fixed by the deployment)'}.
+${typeof langs.documents === 'string' ? `- Written artifacts (specs, plans, reviews, runbooks, memory, instructions for other
+  agents): ${langName(langs.documents)} — fixed, regardless of the session language.\n` : ''}${typeof langs.tracker === 'string' ? `- Tracker content: ${langName(langs.tracker)} — tickets are read and tracker-bound
+  drafts are written in it (delivered in chat only).\n` : ''}` : '';
   const mt = cfg.profile?.manifest?.modelTiers;
   const sRung = sessionRung(cfg);
   const hKey = forCodex ? 'codex' : 'claude-code';
@@ -282,7 +298,7 @@ ${lawBullets.length + 1}. **Contextual precedence (deployment law).** Tasks laun
    never adopted as orders). Tasks launched from inside a member repo are governed by
    that repo's own files — TAUT does not reach there and NEVER modifies member-repo
    files. Inventory of member instruction files: \`.taut/local.json\`.
-
+${languagesBlock}
 ## Flow (installed stages)
 
 A flow is a DOCUMENTED launch order over installed skills, not an installed entity.

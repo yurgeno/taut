@@ -49,6 +49,24 @@ export function resolveModelTiers(mt: any, harness: string): any {
   };
 }
 
+// Session-language choice declared by a deployment: defaults.languages.chat may be
+// {options[], default?} instead of a flat language code — setup asks EXACTLY when the
+// choice is declared (a flat value never asks; the question itself is deployment-
+// authored config, not engine policy). Returns the parsed declaration, or null when the
+// value is flat/absent; a malformed declaration fails the compile.
+export function chatChoice(profileManifest: Record<string, any> | undefined | null): { options: string[]; def?: string } | null {
+  const chat = profileManifest?.defaults?.languages?.chat;
+  if (chat === undefined || typeof chat === 'string') return null;
+  if (typeof chat !== 'object' || chat === null || Array.isArray(chat))
+    fail('defaults.languages.chat must be a language code or {options[], default}');
+  const options = Array.isArray(chat.options) ? chat.options.map(String) : [];
+  if (!options.length) fail('defaults.languages.chat: choice declares no options[]');
+  const def = chat.default !== undefined ? String(chat.default) : undefined;
+  if (def !== undefined && !options.includes(def))
+    fail(`defaults.languages.chat: default "${def}" is not one of the options (${options.join(', ')})`);
+  return { options, def };
+}
+
 // Flow docs whose sequence touches at least one INSTALLED skill ship with the workspace —
 // a flow is documentation of a launch order, so it follows the skills, never the reverse.
 export function installedFlowDocs(cfg: Cfg): FlowDocEntry[] {
@@ -74,6 +92,30 @@ export function buildManifest(cfg: Cfg): Record<string, any> {
   // per-harness maps (always kept) stay the authority there.
   if (extra.modelTiers?.ladder && cfg.harnesses.length === 1)
     extra.modelTiers = resolveModelTiers(extra.modelTiers, cfg.harnesses[0]);
+  // Session-language resolution (a documented special-case of the verbatim pass-through,
+  // like modelTiers): a {options, default} declaration compiles to the FLAT chosen code —
+  // the workspace manifest always carries the resolved value, so laws and skills read one
+  // string and repair re-renders identically. cfg.chatLanguage (setup answer / apply
+  // --chat-language / the previous manifest value) wins; the declared default covers the
+  // rest; a choice that resolves to nothing is a config error, never a silent pick.
+  const choice = chatChoice(extra);
+  if (choice) {
+    let chosen = cfg.chatLanguage ?? choice.def;
+    if (chosen === undefined)
+      fail('defaults.languages.chat: no language chosen and the deployment declares no default — re-run setup or pass --chat-language');
+    if (!choice.options.includes(chosen)) {
+      const to = choice.def ?? choice.options[0];
+      const w = `session language "${chosen}" is no longer offered by the deployment (options: ${choice.options.join(', ')}) — falling back to "${to}"`;
+      if (!cfg.warnings.includes(w)) cfg.warnings.push(w);
+      chosen = to;
+    }
+    extra.defaults = { ...extra.defaults, languages: { ...extra.defaults.languages, chat: chosen } };
+  } else if (cfg.chatLanguage != null && typeof extra.defaults?.languages?.chat === 'string'
+      && extra.defaults.languages.chat !== cfg.chatLanguage) {
+    // apply --chat-language on an existing workspace: the manifest bag read back from the
+    // workspace carries the previously resolved flat value — replace it with the new choice.
+    extra.defaults = { ...extra.defaults, languages: { ...extra.defaults.languages, chat: cfg.chatLanguage } };
+  }
   const chain = stageChain(cfg.catalog);
   return {
     name: prof?.name ?? path.basename(cfg.workspace),

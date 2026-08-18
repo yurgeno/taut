@@ -60,6 +60,7 @@ function parseArgs(argv) {
     else if (a === '--enable-harness') opts.harnessOn.push(argv[++i]);
     else if (a === '--disable-harness') opts.harnessOff.push(argv[++i]);
     else if (a === '--mode') opts.mode = argv[++i];
+    else if (a === '--chat-language') opts.chatLanguage = argv[++i];
     else if (a === '--help' || a === '-h') opts.help = true;
     else opts._.push(a);
   }
@@ -79,7 +80,7 @@ Usage:
                   [--enable-mcp <id>]... [--disable-mcp <id>]...
                   [--connect-repo <name|path>]... [--disconnect-repo <name>]...
                   [--enable-harness <h>]... [--disable-harness <h>]...
-                  [--mode strict|normal]
+                  [--mode strict|normal] [--chat-language <code>]
   taut.mjs repo-scaffold [<repo>...] [--workspace <dir>] [--data <dir>]
   taut.mjs panel  [--workspace <dir>] [--port <n>]
 
@@ -127,7 +128,11 @@ setup   Compile a workspace from the FLAT ARTIFACT MODEL (no flow entity). The c
         Atlas engine folder to integrate — the value IS the location, recorded in
         .taut/local.json and rendered into the instructions; omitted/false = DISABLED,
         the default (leave it out if you do not know what Atlas is), and a bare true
-        fails: an enabled Atlas always carries its folder).
+        fails: an enabled Atlas always carries its folder; chatLanguage: the session
+        language code — accepted ONLY when the deployment declares a choice via
+        defaults.languages.chat = {options[], default}; without the key the declared
+        default applies, and a deployment with a FLAT chat value asks nothing and
+        accepts no override).
 status  The actualization check, one screen: framework pin vs HEAD (behind by how much,
         what changed), integrity vs the lock (lock-clean = settings-conformant — the
         manifest itself is a locked artifact), canonical flag, MCP pins vs the catalog.
@@ -206,6 +211,11 @@ apply   Deliberate per-artifact TOGGLES on an existing workspace, ONE recompile 
         trail); it disciplines sessions, it is not an anti-owner lockout. Built-in
         harness tools (Bash, Read, WebSearch, …) are never gated — mode governs
         ARTIFACTS, not the harness.
+        SESSION LANGUAGE (--chat-language): valid only when the deployment declares a
+        choice (defaults.languages.chat = {options[], default} — asked once at setup);
+        one recompile re-renders the instructions and the flat manifest value. A
+        deployment that fixes the language (flat value) never asks and cannot be
+        overridden here.
 repo-scaffold  AUTO-INIT of missing repo descriptors (the pack is checked first —
         initialization happens only for what does not exist). Repo descriptors are
         per-repo working knowledge shipped from the pack's <project>/repos/<repo>/*.md
