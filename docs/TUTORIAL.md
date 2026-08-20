@@ -277,7 +277,11 @@ node taut.mjs setup --answers /tmp/react-land/answers.json --yes
 ```
 
 (Interactively: `node taut.mjs setup`, pick `react-demo`, check the same boxes.
-On your own project: point `repos` at your real repo and rename the map entry.)
+On your own project: point `repos` at your real repo and rename the map entry.
+Setup also asks one ENGINE-owned question — the usage-telemetry level, `extended`
+(default) or `basic`; omitted in `--answers` the default applies. Telemetry is stored
+ONLY on this machine under `memory/telemetry/`, one file per day, is never sent
+anywhere, and collects no personal data — see HANDBOOK §9.)
 
 What you get: the toolchain of every enabled harness side by side, each invoked its own
 native way (`/analyze` in Claude Code, `$analyze` in Codex), the

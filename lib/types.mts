@@ -26,6 +26,9 @@ export interface CliOpts {
   port?: number;
   mode?: string;
   chatLanguage?: string;
+  telemetry?: string;
+  since?: string;
+  to?: string;
   help?: boolean;
 }
 
@@ -91,6 +94,10 @@ export interface Cfg {
   // enabled; null on legacy workspaces that recorded only the flag.
   atlasRoot?: string | null;
   mode: string;
+  // Usage-telemetry level ('basic' | 'extended') — an ENGINE-owned setup choice
+  // (default extended; pack-independent). Local-only by law: daily files under
+  // memory/telemetry/, never sent anywhere, no personal data.
+  telemetry?: string;
   // Session-communication language CHOSEN for this workspace — set only when the
   // deployment declares a choice (defaults.languages.chat = {options[], default});
   // null = the deployment fixes the language (flat value) or has none. The resolved
@@ -143,6 +150,9 @@ export interface Lock {
   session?: Record<string, { model?: string; effort?: string }>;
   atlas: boolean;
   mode?: string;
+  // Telemetry level — the gate reads it from the lock (the same tamper-anchored root as
+  // `mode`). Absent (legacy lock) = extended, the default.
+  telemetry?: string;
   artifacts: ArtifactRow[];
   mcp: { id: string; role: string; serverKey: string; package: string; pin: string; runner: string }[];
 }
@@ -185,5 +195,6 @@ export interface StatusData {
   } | null;
   artifacts: { total: number; drifted: string[] };
   mcp: { id: string; pin: string; catalogPin: string | null }[];
+  telemetry: string;
   current: boolean;
 }

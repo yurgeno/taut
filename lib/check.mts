@@ -15,6 +15,7 @@ import process from 'node:process';
 import type { ChildProcess, ExecSyncOptionsWithStringEncoding } from 'node:child_process';
 
 import { bold, dim, exists, expandHome, fail, green, red, readIfExists, safeJoin, sha256, yellow } from './util.mts';
+import { createTelemetry } from '../gate/telemetry.mjs';
 import type { CliOpts, Lock } from './types.mts';
 
 const MCP_HANDSHAKE_TIMEOUT = 30_000; // npx cold-start may download the package
@@ -215,6 +216,17 @@ export async function cmdCheck(opts: CliOpts): Promise<void> {
   const failed = results.filter((r) => r.status === 'fail');
   const warned = results.filter((r) => r.status === 'warn');
   const verdict = failed.length ? 'NOT READY' : 'READY';
+
+  // Local-only check telemetry: verdict + probe counts + failed AREA labels (no values).
+  createTelemetry({
+    workspace: ws,
+    level: lock.telemetry,
+    meta: { engine: lock.framework?.commit?.slice(0, 7) ?? null, data: lock.data?.commit?.slice(0, 7) ?? null, mode: lock.mode ?? 'normal', harnesses },
+  }).log({
+    event: 'check', verdict,
+    probes: { total: results.length, failed: failed.length, warned: warned.length },
+    ...(failed.length ? { failedAreas: failed.map((r) => r.area) } : {}),
+  });
 
   if (opts.json) {
     process.stdout.write(JSON.stringify({ workspace: ws, verdict, results }, null, 2) + '\n');

@@ -44,6 +44,9 @@ export async function writeLock(cfg: Cfg, artifacts: ArtifactRow[]): Promise<Loc
     // Strict/normal mode: the gate reads the MODE from the lock — the same
     // tamper-anchored root it verifies artifacts against. Absent (legacy lock) = normal.
     mode: cfg.mode ?? 'normal',
+    // Telemetry level rides the lock exactly like mode — the gate's config root; no
+    // extra reads on the event path. Absent (legacy lock) = extended, the default.
+    telemetry: cfg.telemetry === 'basic' ? 'basic' : 'extended',
     artifacts,
     mcp: cfg.mcp.map((id) => {
       const c = MCP_CATALOG[id];

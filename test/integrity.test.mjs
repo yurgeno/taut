@@ -56,9 +56,17 @@ test('gate: PreToolUse allows clean managed artifacts, blocks tampered, ignores 
   r = await runGate(ws, 'pretooluse', { tool_name: 'Agent', tool_input: { subagent_type: 'fx-reviewer' } });
   assert.equal(JSON.parse(r.stdout).hookSpecificOutput.permissionDecision, 'deny');
 
-  const usage = (await fs.readFile(path.join(ws, 'memory', 'telemetry', 'usage.jsonl'), 'utf8'))
+  // Telemetry: daily local files (one per local day), meta first line, level default
+  // extended, lifecycle + gate events all present, harness recorded on gate events.
+  const telDir = path.join(ws, 'memory', 'telemetry');
+  const dayFiles = (await fs.readdir(telDir)).filter((f) => /^\d{4}-\d{2}-\d{2}\.jsonl$/.test(f));
+  assert.equal(dayFiles.length, 1, 'one daily telemetry file per local day');
+  const usage = (await fs.readFile(path.join(telDir, dayFiles[0]), 'utf8'))
     .trim().split('\n').map((l) => JSON.parse(l));
-  assert.ok(usage.some((u) => u.event === 'invoke' && u.name === 'fx-plan' && u.decision === 'allow' && u.managed === true));
+  assert.equal(usage[0].event, 'meta', 'a day file opens with its meta line');
+  assert.equal(usage[0].level, 'extended', 'telemetry defaults to extended');
+  assert.ok(usage.some((u) => u.event === 'setup' && u.pins?.engine?.to), 'the compile logs its lifecycle event');
+  assert.ok(usage.some((u) => u.event === 'invoke' && u.name === 'fx-plan' && u.decision === 'allow' && u.managed === true && u.harness === 'claude-code'));
   assert.ok(usage.some((u) => u.name === 'fx-plan' && u.decision === 'deny'));
   assert.ok(usage.some((u) => u.name === 'not-ours' && u.managed === false));
 });

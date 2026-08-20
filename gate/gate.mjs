@@ -6,7 +6,9 @@
 // managed artifacts are use-only; changes go through the framework source + recompile).
 // Self-contained (node builtins only; works without the framework clone present).
 // Fail-closed: an unreadable lock or an internal error blocks; `repair` heals.
-// The same gate is the usage-telemetry writer (memory/telemetry/usage.jsonl).
+// Usage telemetry goes through the sibling adapter .taut/telemetry.mjs (LOCAL-ONLY
+// daily files under memory/telemetry/ — never sent anywhere; a missing adapter is a
+// silent no-op, telemetry never breaks the gate).
 
 import { execFileSync } from 'node:child_process';
 import { createHash } from 'node:crypto';
@@ -42,12 +44,19 @@ function artifactState(id, want) {
   catch { return 'MISSING'; }
 }
 
+// Telemetry rides the SIBLING adapter (compiled next to this gate) — the single write
+// path for usage telemetry. Adapter missing/unreadable → tel stays null and every log
+// call is a no-op: the gate keeps enforcing without it. Level + day-file meta come from
+// the lock once it loads; until then the pre-lock default applies (early deny events).
+let telemetryMod = null;
+try { telemetryMod = await import(new URL('./telemetry.mjs', import.meta.url).href); } catch { telemetryMod = null; }
+let tel = null;
+function initTelemetry(level, meta) {
+  try { tel = telemetryMod ? telemetryMod.createTelemetry({ workspace: WS, level, meta }) : null; } catch { tel = null; }
+}
+initTelemetry(undefined, null);
 function logUsage(entry) {
-  try {
-    const dir = path.join(WS, 'memory', 'telemetry');
-    fs.mkdirSync(dir, { recursive: true });
-    fs.appendFileSync(path.join(dir, 'usage.jsonl'), JSON.stringify(entry) + '\n');
-  } catch { /* telemetry must never break the gate */ }
+  try { tel?.log(entry); } catch { /* telemetry must never break the gate */ }
 }
 
 function denyTool(reason) {
@@ -76,11 +85,19 @@ try {
   try { lock = JSON.parse(fs.readFileSync(path.join(WS, 'taut.lock'), 'utf8')); }
   catch {
     const reason = `TAUT gate: taut.lock is missing/unreadable in ${WS} — integrity cannot be proven, managed artifacts are blocked. ${REPAIR_HINT}`;
-    logUsage({ ts, event: EVENT, decision: 'deny', cause: 'lock-missing', session_id: sid });
+    logUsage({ ts, event: EVENT, decision: 'deny', cause: 'lock-missing', harness: HARNESS_ARG ?? undefined, session_id: sid });
     if (EVENT === 'pretooluse') denyTool(reason);
     if (EVENT === 'sessionstart') sessionContext(`⚠ ${reason}`);
     blockExit2(reason);
   }
+
+  // The lock is the telemetry config root too (like `mode`): level + day-file meta.
+  initTelemetry(lock.telemetry, {
+    engine: lock.framework?.commit?.slice(0, 7) ?? null,
+    data: lock.data?.commit?.slice(0, 7) ?? null,
+    mode: lock.mode ?? 'normal',
+    harnesses: lock.harnesses ?? (lock.harness ? [lock.harness] : []),
+  });
 
   // Enabled harness set (lock v3; a legacy v1/v2 lock carries a scalar). Wiring and lock
   // are rendered by the same compile, so an identity OUTSIDE the enabled set means stale
@@ -121,10 +138,10 @@ try {
       const server = tool.split('__')[1] ?? '';
       const allowed = (lock.mcp ?? []).some((m) => m.serverKey === server);
       if (strict && !allowed) {
-        logUsage({ ts, event: 'invoke', kind: 'mcp', name: server, decision: 'deny', cause: 'strict-foreign', session_id: sid });
+        logUsage({ ts, event: 'invoke', kind: 'mcp', name: server, decision: 'deny', cause: 'strict-foreign', harness: HARNESS, session_id: sid });
         denyTool(`TAUT gate: MCP server "${server}" is not in this workspace's manifest. ${strictHint}`);
       }
-      logUsage({ ts, event: 'invoke', kind: 'mcp', name: server, decision: 'allow', managed: allowed, session_id: sid });
+      logUsage({ ts, event: 'invoke', kind: 'mcp', name: server, decision: 'allow', managed: allowed, harness: HARNESS, session_id: sid });
       process.exit(0);
     }
     let kind = null; let name = null; let id = null;
@@ -145,30 +162,30 @@ try {
       // no file is a harness BUILT-IN (general-purpose, Explore, ...) and stays allowed.
       const foreignAgentFile = kind === 'agent' && name && fs.existsSync(path.join(WS, agentArtifact(name)));
       if (strict && (kind === 'skill' || foreignAgentFile) && name) {
-        logUsage({ ts, event: 'invoke', kind, name, decision: 'deny', cause: 'strict-foreign', session_id: sid });
+        logUsage({ ts, event: 'invoke', kind, name, decision: 'deny', cause: 'strict-foreign', harness: HARNESS, session_id: sid });
         denyTool(`TAUT gate: ${kind} "${name}" is not part of the compiled toolchain. ${strictHint}`);
       }
-      logUsage({ ts, event: 'invoke', kind, name, decision: 'allow', managed: false, session_id: sid });
+      logUsage({ ts, event: 'invoke', kind, name, decision: 'allow', managed: false, harness: HARNESS, session_id: sid });
       process.exit(0); // not a TAUT-managed artifact — none of our business
     }
     const coreBad = checkIds(coreIds);
     if (coreBad.length) {
-      logUsage({ ts, event: 'invoke', kind, name, decision: 'deny', cause: 'core-drift', session_id: sid });
+      logUsage({ ts, event: 'invoke', kind, name, decision: 'deny', cause: 'core-drift', harness: HARNESS, session_id: sid });
       denyTool(`TAUT gate: workspace core artifacts are out of sync (${coreBad.join(', ')}) — refusing to run managed ${kind} "${name}". ${REPAIR_HINT}`);
     }
     const st = artifactState(id, byId.get(id));
     if (st !== 'ok') {
-      logUsage({ ts, event: 'invoke', kind, name, decision: 'deny', cause: st.toLowerCase(), session_id: sid });
+      logUsage({ ts, event: 'invoke', kind, name, decision: 'deny', cause: st.toLowerCase(), harness: HARNESS, session_id: sid });
       denyTool(`TAUT gate: ${kind} "${name}" was modified outside the pipeline (${st}: ${id}). Managed artifacts are use-only. ${REPAIR_HINT}`);
     }
-    logUsage({ ts, event: 'invoke', kind, name, decision: 'allow', managed: true, session_id: sid });
+    logUsage({ ts, event: 'invoke', kind, name, decision: 'allow', managed: true, harness: HARNESS, session_id: sid });
     process.exit(0);
   }
 
   if (EVENT === 'promptsubmit') {
     const bad = checkIds(coreIds);
     if (bad.length) {
-      logUsage({ ts, event: 'prompt', decision: 'block', cause: 'core-drift', drifted: bad.length, session_id: sid });
+      logUsage({ ts, event: 'prompt', decision: 'block', cause: 'core-drift', drifted: bad.length, harness: HARNESS, session_id: sid });
       blockPrompt(`TAUT gate: core workspace artifacts drifted (${bad.join(', ')}). Prompts are blocked until integrity is restored. ${REPAIR_HINT}`);
     }
     process.exit(0);
@@ -189,7 +206,7 @@ try {
       try { local = fs.readdirSync(skillsDir); } catch { local = []; }
       const foreign = local.filter((n) => !byId.has(skillArtifact(n)) && mentions(text, n));
       if (foreign.length) {
-        logUsage({ ts, event: 'expansion', decision: 'block', cause: 'strict-foreign', name: foreign.join(','), session_id: sid });
+        logUsage({ ts, event: 'expansion', decision: 'block', cause: 'strict-foreign', name: foreign.join(','), harness: HARNESS, session_id: sid });
         blockExit2(`TAUT gate: skill "${foreign.join('", "')}" is not part of the compiled toolchain. ${strictHint}`);
       }
     }
@@ -199,7 +216,7 @@ try {
     });
     const bad = checkIds([...coreIds, ...invoked.map((a) => a.id)]);
     if (bad.length) {
-      logUsage({ ts, event: 'expansion', decision: 'block', drifted: bad.length, session_id: sid });
+      logUsage({ ts, event: 'expansion', decision: 'block', drifted: bad.length, harness: HARNESS, session_id: sid });
       blockExit2(`TAUT gate: blocked — drifted artifacts: ${bad.join(', ')}. ${REPAIR_HINT}`);
     }
     process.exit(0);
@@ -207,7 +224,6 @@ try {
 
   if (EVENT === 'sessionstart') {
     const bad = checkIds([...byId.keys()]);
-    logUsage({ ts, event: 'session_start', drifted: bad.length, session_id: sid });
     const notes = [];
     if (strict) {
       notes.push('TAUT: STRICT workspace — only the compiled toolchain runs (skills, agents, MCP per taut.lock); foreign artifacts are denied at invocation. Harness built-ins are unaffected.');
@@ -236,12 +252,14 @@ try {
     // Actualization ADVISORY (never blocking — a pinned build is still consistent):
     // when the framework clone or the DATA PACK is reachable and moved past this
     // workspace's pins, say so. Best-effort by design: a workspace must keep working
-    // without either repo present.
+    // without either repo present. The same probe feeds telemetry: behind.{engine,data}
+    // per session is the actualization-lag series (axis absent = unreadable/unknown).
+    const behind = {};
     try {
       const local = JSON.parse(fs.readFileSync(path.join(WS, '.taut', 'local.json'), 'utf8'));
       const axes = [
-        { label: 'framework', root: local.frameworkRoot, pin: lock.framework?.commit },
-        { label: 'data pack', root: local.dataRoot, pin: lock.data?.commit },
+        { key: 'engine', label: 'framework', root: local.frameworkRoot, pin: lock.framework?.commit },
+        { key: 'data', label: 'data pack', root: local.dataRoot, pin: lock.data?.commit },
       ];
       for (const ax of axes) {
         if (!ax.root || !ax.pin || !isCommit(ax.pin)) continue;
@@ -251,11 +269,13 @@ try {
           if (head && head !== ax.pin) {
             let n = '?';
             try { n = execFileSync('git', ['rev-list', '--count', `${ax.pin}..HEAD`], git).trim(); } catch { /* pin not in history */ }
+            behind[ax.key] = n === '?' ? null : Number(n);
             notes.push(`TAUT: the ${ax.label} is ${n} commit(s) ahead of this workspace (pin ${ax.pin.slice(0, 7)} → ${head.slice(0, 7)}). Actualize with \`taut update --workspace ${WS}\`.`);
-          }
+          } else if (head) behind[ax.key] = 0;
         } catch { /* this axis unreadable — stay silent for it */ }
       }
     } catch { /* no local binding — stay silent */ }
+    logUsage({ ts, event: 'session_start', drifted: bad.length, ...(Object.keys(behind).length ? { behind } : {}), harness: HARNESS, session_id: sid });
     if (notes.length) sessionContext(notes.join('\n'));
     process.exit(0);
   }
@@ -264,7 +284,7 @@ try {
 } catch (e) {
   // Fail-closed: an internal gate error must not silently wave tampered artifacts through.
   const reason = `TAUT gate: internal error (${e?.message ?? e}) — blocking as a precaution. ${REPAIR_HINT}`;
-  logUsage({ ts, event: EVENT, decision: 'deny', cause: 'gate-error', session_id: sid });
+  logUsage({ ts, event: EVENT, decision: 'deny', cause: 'gate-error', harness: HARNESS_ARG ?? undefined, session_id: sid });
   if (EVENT === 'pretooluse') denyTool(reason);
   if (EVENT === 'sessionstart') sessionContext(`⚠ ${reason}`);
   blockExit2(reason);

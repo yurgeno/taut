@@ -13,6 +13,7 @@ import { bold, dim, exists, expandHome, fail, gitInfo, gitInfoOwn, green, isComm
 import { atlasRequired, neededAgents } from './artifacts.mts';
 import { askText, banner } from './tui.mts';
 import { cfgFromWorkspace, gatherConfig, isConductorDir, listDeployments, normalizeHarnesses, relintRepoBindings } from './config.mts';
+import { TELEMETRY_LEVELS, createTelemetry } from '../gate/telemetry.mjs';
 import { chatChoice } from './manifest.mts';
 import { install, memoryRootFor, migrateLegacyLayout, scanMemberInstructionFiles } from './install.mts';
 import { verify, writeLock } from './lock.mts';
@@ -53,7 +54,7 @@ export async function cmdSetup(opts: CliOpts): Promise<void> {
   await compileWorkspace(cfg);
 }
 
-export async function compileWorkspace(cfg: Cfg, { verb = 'compiled' }: { verb?: string } = {}): Promise<void> {
+export async function compileWorkspace(cfg: Cfg, { verb = 'compiled', extra = null }: { verb?: string; extra?: Record<string, any> | null } = {}): Promise<void> {
   // Pre-rename FEDERATION workspaces migrate in place on their first recompile: the old
   // lock is read as the sweep source, instance files move .federation/ → .taut/, and the
   // legacy layout is swept below like any renamed payload.
@@ -116,6 +117,24 @@ export async function compileWorkspace(cfg: Cfg, { verb = 'compiled' }: { verb?:
 
   const lock = await writeLock(cfg, artifacts);
 
+  // Lifecycle telemetry (LOCAL-ONLY, level-aware): the compile chokepoint records
+  // actualization behavior — setup/update/repair/apply with the pin movement. Repo
+  // names never enter telemetry (universality law): callers pass counts, never names.
+  const verbEvent: Record<string, string> = { compiled: 'setup', updated: 'update', repaired: 'repair', applied: 'apply' };
+  createTelemetry({
+    workspace: cfg.workspace,
+    level: lock.telemetry,
+    meta: { engine: lock.framework.commit?.slice(0, 7) ?? null, data: lock.data?.commit?.slice(0, 7) ?? null, mode: lock.mode ?? 'normal', harnesses: lock.harnesses },
+  }).log({
+    event: verbEvent[verb] ?? verb,
+    pins: {
+      engine: { from: oldLock?.framework?.commit?.slice(0, 7) ?? null, to: lock.framework.commit?.slice(0, 7) ?? null },
+      data: { from: oldLock?.data?.commit?.slice(0, 7) ?? null, to: lock.data?.commit?.slice(0, 7) ?? null },
+    },
+    artifacts: artifacts.length,
+    ...(extra ?? {}),
+  });
+
   const p = (s: string) => process.stdout.write(s + '\n');
   p('');
   p(`${green('✔')} ${bold(`TAUT workspace ${verb}`)} ${dim('·')} ${cfg.workspace}`);
@@ -141,6 +160,9 @@ export async function compileWorkspace(cfg: Cfg, { verb = 'compiled' }: { verb?:
   p(`  ${dim('mcp')}       ${cfg.mcp.length ? cfg.mcp.map((id) => `${id}${dim(`@${MCP_CATALOG[id].pin}`)}`).join(', ') : 'none'}`);
   if (removed.length) p(`  ${dim('removed')}   ${removed.length} stale artifact(s) ${dim(`· ${removed.join(', ')}`)}`);
   p(`  ${dim('memory')}    ${memoryRootFor(cfg.workspace)} ${dim('· instance data, never touched; workspace memory/ is a symlink')}`);
+  p(`  ${dim('telemetry')} ${lock.telemetry} ${dim('· stored ONLY on this machine (memory/telemetry/, one file per day) — never sent anywhere; no personal data')}`);
+  if (oldLock && oldLock.telemetry === undefined)
+    p(`  ${dim('telemetry')} ${yellow('adopted the default "extended"')} ${dim('(pre-telemetry workspace) — change: taut apply --telemetry basic')}`);
   p(`  ${dim('repos')}     ${cfg.repos.length} ${dim(`· ${cfg.repos.map((r) => r.name).join(', ')}`)}`);
   for (const h of cfg.harnesses)
     p(`  ${dim('gate')}      ${green('ACTIVE')} ${dim(h === 'codex'
@@ -278,6 +300,7 @@ export async function statusData(ws: string): Promise<StatusData> {
     } : null,
     artifacts: { total: (lock.artifacts ?? []).length, drifted },
     mcp,
+    telemetry: lock.telemetry === 'basic' ? 'basic' : 'extended',
     current,
   };
 }
@@ -297,7 +320,7 @@ export async function cmdStatus(opts: CliOpts): Promise<void> {
 
   const p = (s: string) => process.stdout.write(s + '\n');
   p(`${current ? green('✔') : yellow('!')} ${bold('TAUT workspace status')} ${dim('·')} ${ws}`);
-  p(`  ${dim('deployment')} ${st.deployment ?? 'generic'}   ${dim('harness')} ${st.harnesses.join(' + ')}   ${dim('atlas')} ${st.atlas ? 'enabled' : 'disabled'}   ${dim('built')} ${st.generatedAt ?? '?'}${fw.canonical ? '' : `   ${yellow('NON-CANONICAL')}`}`);
+  p(`  ${dim('deployment')} ${st.deployment ?? 'generic'}   ${dim('harness')} ${st.harnesses.join(' + ')}   ${dim('atlas')} ${st.atlas ? 'enabled' : 'disabled'}   ${dim('telemetry')} ${st.telemetry}   ${dim('built')} ${st.generatedAt ?? '?'}${fw.canonical ? '' : `   ${yellow('NON-CANONICAL')}`}`);
   const pinTxt = fw.pin?.slice(0, 7) ?? 'none';
   if (fw.behind === 0) p(`  ${dim('framework')}  pin ${pinTxt} ${green('== HEAD — up to date')}`);
   else if (!fw.pinKnown) p(`  ${dim('framework')}  pin ${pinTxt} ${yellow('not found in the framework clone history')} ${dim('(rebased/amended? re-run setup or update)')}`);
@@ -470,8 +493,8 @@ export async function cmdApply(opts: CliOpts): Promise<void> {
   if (!await exists(path.join(ws, 'manifest.json'))) fail(`no manifest.json in ${ws} — not a TAUT workspace`);
   const total = opts.skillsOn.length + opts.skillsOff.length + opts.mcpOn.length + opts.mcpOff.length
     + opts.reposOn.length + opts.reposOff.length + opts.harnessOn.length + opts.harnessOff.length
-    + (opts.mode ? 1 : 0) + (opts.chatLanguage ? 1 : 0);
-  if (!total) fail('nothing to apply — pass --enable-skill/--disable-skill/--enable-mcp/--disable-mcp/--connect-repo/--disconnect-repo/--enable-harness/--disable-harness/--mode/--chat-language');
+    + (opts.mode ? 1 : 0) + (opts.chatLanguage ? 1 : 0) + (opts.telemetry ? 1 : 0);
+  if (!total) fail('nothing to apply — pass --enable-skill/--disable-skill/--enable-mcp/--disable-mcp/--connect-repo/--disconnect-repo/--enable-harness/--disable-harness/--mode/--chat-language/--telemetry');
   await initDataFor({ explicit: opts.data ?? null, ws });
   const cfg = await cfgFromWorkspace(ws);
 
@@ -482,6 +505,13 @@ export async function cmdApply(opts: CliOpts): Promise<void> {
   if (opts.mode) {
     if (!['strict', 'normal'].includes(opts.mode)) fail(`unknown mode "${opts.mode}" (expected: strict, normal)`);
     cfg.mode = opts.mode;
+  }
+
+  // TELEMETRY LEVEL toggle: the level is an engine-owned workspace setting (manifest +
+  // lock, like mode) — one recompile re-stamps both. Always local-only, whatever the level.
+  if (opts.telemetry) {
+    if (!TELEMETRY_LEVELS.includes(opts.telemetry)) fail(`unknown telemetry level "${opts.telemetry}" (expected: ${TELEMETRY_LEVELS.join(', ')})`);
+    cfg.telemetry = opts.telemetry;
   }
 
   // SESSION LANGUAGE change: valid only when the deployment declares a choice — the
@@ -593,5 +623,26 @@ export async function cmdApply(opts: CliOpts): Promise<void> {
     cfg.mcp = cfg.mcp.filter((x) => x !== id);
   }
 
-  await compileWorkspace(cfg, { verb: 'applied' });
+  // Telemetry event payload: counts survive at every level; per-name detail is
+  // extended-only (the adapter strips `detail` on basic). Repo toggles: COUNTS ONLY —
+  // repository names never enter telemetry.
+  await compileWorkspace(cfg, {
+    verb: 'applied',
+    extra: {
+      counts: {
+        skillsOn: opts.skillsOn.length, skillsOff: opts.skillsOff.length,
+        mcpOn: opts.mcpOn.length, mcpOff: opts.mcpOff.length,
+        reposOn: added.length, reposOff: opts.reposOff.length,
+        harnessOn: opts.harnessOn.length, harnessOff: opts.harnessOff.length,
+        ...(opts.mode ? { mode: opts.mode } : {}),
+        ...(opts.chatLanguage ? { chatLanguage: true } : {}),
+        ...(opts.telemetry ? { telemetry: opts.telemetry } : {}),
+      },
+      detail: {
+        skillsOn: opts.skillsOn, skillsOff: opts.skillsOff,
+        mcpOn: opts.mcpOn, mcpOff: opts.mcpOff,
+        harnessOn: opts.harnessOn, harnessOff: opts.harnessOff,
+      },
+    },
+  });
 }

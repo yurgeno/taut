@@ -114,7 +114,7 @@ export const HARNESSES = ['claude-code', 'codex'];
 // stays reserved defensively: it was the pre-flat-model flow-package record and must never ride
 // in from a config again.
 export const OWNED_MANIFEST_KEYS = new Set([
-  'name', 'framework', 'deployment', 'description', 'harness', 'harnesses', 'atlas', 'mode', 'flow', 'flows',
+  'name', 'framework', 'deployment', 'description', 'harness', 'harnesses', 'atlas', 'mode', 'telemetry', 'flow', 'flows',
   'flowDocs', 'runbooks', 'repoDocs', 'skills', 'skillsSelection', 'skillsExcluded',
   'agents', 'mcp', 'repos', 'laws',
 ]);

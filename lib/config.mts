@@ -8,6 +8,7 @@ import process from 'node:process';
 import {
   HARNESSES, MCP_CATALOG, OWNED_MANIFEST_KEYS, initProject, langName, requireData,
 } from './constants.mts';
+import { TELEMETRY_LEVELS } from '../gate/telemetry.mjs';
 import { bold, dim, exists, expandHome, fail, green, readIfExists, yellow } from './util.mts';
 import { chatChoice } from './manifest.mts';
 import { atlasRequired, lintRepoBindings, loadCatalog, stageChain } from './artifacts.mts';
@@ -126,7 +127,7 @@ export async function gatherConfig(answers: any, interactive: boolean): Promise<
   const cfg = {} as Cfg;
   const warnings: string[] = [];
   const need = (k: string) => fail(`missing config "${k}" (non-interactive run needs it in --answers)`);
-  let totalSteps = 7 + (deployments.length ? 1 : 0);
+  let totalSteps = 8 + (deployments.length ? 1 : 0);
   let stepNo = 0;
   const step = (t: string) => `Step ${++stepNo}/${totalSteps} · ${t}`;
 
@@ -307,6 +308,27 @@ export async function gatherConfig(answers: any, interactive: boolean): Promise<
   }
   if (!['strict', 'normal'].includes(cfg.mode)) fail(`unknown mode "${cfg.mode}" (expected: strict, normal)`);
 
+  // USAGE TELEMETRY — an ENGINE-owned choice (present for every pack: telemetry is
+  // engine infrastructure, not pack policy — the question exists regardless of the
+  // deployment, which keeps it pack-independent). LOCAL-ONLY by law: daily files under
+  // memory/telemetry/ on this machine, never sent anywhere; no personal data (no prompt
+  // content, no paths, no identities, no repository names). basic = the diagnostic
+  // minimum (errors, denials, lifecycle); extended (default) adds usage events.
+  if (answers.telemetry !== undefined) {
+    const v = String(answers.telemetry);
+    if (!TELEMETRY_LEVELS.includes(v)) fail(`unknown telemetry level "${v}" (expected: ${TELEMETRY_LEVELS.join(', ')})`);
+    cfg.telemetry = v;
+    stepNo += 1;
+  } else if (!interactive) {
+    cfg.telemetry = 'extended'; // the declared default — no answers key required
+  } else {
+    cfg.telemetry = await tuiSelect(step('Usage telemetry (stays on this machine — never sent anywhere)'), [
+      { label: 'extended', value: 'extended', hint: 'default · usage + lifecycle detail for evaluating the framework; local files only' },
+      { label: 'basic', value: 'basic', hint: 'diagnostic minimum — errors, denials, lifecycle' },
+    ], { summary: (v) => v });
+    process.stdout.write(dim('  telemetry is stored ONLY on this computer (memory/telemetry/, one file per day); files are never sent anywhere; no personal data is collected') + '\n');
+  }
+
   // SESSION LANGUAGE — asked ONLY when the deployment declares a choice
   // (defaults.languages.chat = {options[], default}); a flat value (or no deployment)
   // fixes the language and setup never asks — the question set is deployment-authored
@@ -460,6 +482,9 @@ export async function cfgFromWorkspace(ws: string): Promise<Cfg> {
     atlas: Boolean(manifest.atlas?.enabled),
     atlasRoot: local.atlasRoot ?? null, // machine binding; legacy workspaces have none
     mode: manifest.mode ?? 'normal',
+    // Pre-telemetry manifests have no key — they adopt the default (extended); the
+    // surfaced migration note lives in compileWorkspace, next to the old lock.
+    telemetry: manifest.telemetry?.level === 'basic' ? 'basic' : 'extended',
     // The manifest carries the RESOLVED flat language; it counts as a live choice only
     // when the real deployment (still) declares one — a pack with a fixed language (or
     // an unreachable pack) reconstructs as null and the flat value passes through as-is.

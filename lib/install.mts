@@ -232,6 +232,10 @@ export async function install(cfg: Cfg): Promise<ArtifactRow[]> {
 
   // Integrity gate: self-contained gate script + harness hook wiring, both locked.
   await copyArtifact(artifacts, ws, '.taut/gate.mjs', path.join(FW_ROOT, 'gate', 'gate.mjs'));
+  // The telemetry adapter ships NEXT to the gate — the SINGLE write path for usage
+  // telemetry (local-only daily files under memory/telemetry/); the gate imports it as
+  // a sibling, the CLI uses the engine copy. Missing adapter = telemetry no-op.
+  await copyArtifact(artifacts, ws, '.taut/telemetry.mjs', path.join(FW_ROOT, 'gate', 'telemetry.mjs'));
   // The law text ships WITH the workspace (the law source is the
   // framework repo, never an external path); non-payload id ⇒ CORE for the gate.
   // Laws are a CORE document of the distribution model — every workspace gets them.

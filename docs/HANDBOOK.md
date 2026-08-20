@@ -87,7 +87,9 @@ wiring carrying its identity (`--harness …`). Behavior:
   "engine/pack moved N commits" advisory, and the model-policy advisory (live model vs
   the profile pin). Advisories never block.
 - A gate invoked with the identity of a DISABLED harness (stale wiring) fails closed.
-- Every managed invocation is appended to `memory/telemetry/usage.jsonl`.
+- Every managed invocation is recorded through the telemetry adapter (see §9) —
+  LOCAL-ONLY daily files under `memory/telemetry/`; a missing adapter is a silent
+  no-op, telemetry never breaks the gate.
 
 An unreadable `taut.lock` blocks managed artifacts entirely — the lock is the only
 trust root, and the gate would rather refuse than guess.
@@ -101,7 +103,8 @@ trust root, and the gate would rather refuse than guess.
 | `verify` | nothing (read-only) | "are the installed files still the ones I compiled?" — re-hashes every artifact against the lock; `--source` additionally re-derives the COPIED ones from the pinned commits (generated artifacts stay lock-checked) |
 | `update` | re-pins engine + pack (recompile) | deliberate actualization; `--data-only` re-pins the pack alone (refuses when the core moved); an "all" skill selection auto-installs newly shipped skills |
 | `repair` | restores drifted/deleted files (recompile from the workspace's own manifest) | healing after tampering or accidents; renders with the current engine tree |
-| `apply` | toggles: `--enable/--disable-skill`, `--enable/--disable-mcp`, `--connect/--disconnect-repo`, `--enable/--disable-harness`, `--mode strict|normal` | one deliberate recompile per batch; the panel's checklists ride this |
+| `apply` | toggles: `--enable/--disable-skill`, `--enable/--disable-mcp`, `--connect/--disconnect-repo`, `--enable/--disable-harness`, `--mode strict|normal`, `--telemetry basic|extended` | one deliberate recompile per batch; the panel's checklists ride this |
+| `report` | nothing (read-only) | LOCAL aggregation of the workspace's telemetry files: sessions, actualization lag, usage by artifact, denials by cause, lifecycle chronology; `--since`/`--to`/`--json`. Prints only on this machine — sharing the output is a manual act |
 
 **The values channel:** deployment VALUES (model tiers, stacks, flow values) enter the
 manifest only through `update --from-deployment` (panel: **Refresh deployment**) — a
@@ -152,12 +155,35 @@ pinned separately through the ladder (`rolePolicy` + agent frontmatter).
 ## 9. Memory
 
 `memory/` is a symlink to the sibling `<workspace>-memory` folder. The framework
-NEVER writes, rewrites or sweeps anything under it — the guarantee is structural (a
+NEVER owns, rewrites or sweeps anything under it — the guarantee is structural (a
 compile that tries to route an artifact there fails). Ticket runs write
-`memory/spec/<TICKET>/`; the gate writes `memory/telemetry/usage.jsonl`. The workspace
+`memory/spec/<TICKET>/`; telemetry appends under `memory/telemetry/`. The workspace
 folder is disposable; the memory is not. Caveat: an IDE-side "discard changes" over the
 workspace can still delete instance files the framework protects — treat agent-created
 memory as data, not as reviewable diff noise.
+
+**Telemetry (engine-owned; LOCAL-ONLY BY LAW).** All usage telemetry goes through ONE
+adapter — `.taut/telemetry.mjs`, compiled next to the gate — into
+`memory/telemetry/YYYY-MM-DD.jsonl`, one file per LOCAL day (the first line of each day
+is a `meta` row with the build pins/mode/harnesses). Files stay on this computer and
+are NEVER sent anywhere; there is no send mechanism by construction — sharing a file or
+a `taut report` output is always your manual, deliberate act. No personal data is
+collected: no prompt content, no tool arguments, no file paths, no machine/user/git
+identities, no env values, and no repository names (repo toggles are recorded as
+counts). Two levels, chosen at setup (default **extended**) and switchable any time
+with `taut apply --telemetry basic|extended`:
+
+- **basic** — the diagnostic minimum: errors, denials (with the artifact name and
+  cause), prompt blocks, lifecycle events (setup/update/repair/apply/check with pin
+  movements), and the per-session actualization lag.
+- **extended** (default) — basic plus usage: allow-decisions per skill/agent/MCP and
+  per-name apply detail — the data that lets `taut report` show what the toolchain
+  actually does day to day.
+
+A workspace compiled before telemetry existed adopts the default on its next
+update/repair (surfaced in the output). Event completeness differs per harness hook
+surface and is surfaced in `taut report`, never hidden. A pre-telemetry
+`usage.jsonl` stays untouched; `report` still reads it.
 
 ## 10. Strict mode
 

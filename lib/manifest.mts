@@ -125,6 +125,9 @@ export function buildManifest(cfg: Cfg): Record<string, any> {
     harnesses: cfg.harnesses,
     atlas: { enabled: cfg.atlas },
     mode: cfg.mode ?? 'normal',
+    // Usage-telemetry level (an ENGINE-owned setup choice; default extended). Local-only
+    // by law: daily files under memory/telemetry/, never sent anywhere, no personal data.
+    telemetry: { level: cfg.telemetry === 'basic' ? 'basic' : 'extended', localOnly: true },
     // The config's flow VALUES merge around the engine-computed `stages` — stages spread
     // LAST, so a pack authoring `flow.stages` itself cannot override the real installed
     // chain (it is derived from the flow docs × the installed skills, never declared).

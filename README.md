@@ -97,6 +97,12 @@ edited around the pipeline.
 - **Memory outside the workspace.** Instance data (ticket memory, telemetry) lives in a
   sibling folder symlinked in; the workspace is disposable — delete and recompile, the
   memory survives.
+- **Telemetry that stays home.** Usage telemetry is written ONLY to this machine
+  (`memory/telemetry/`, one file per local day) and is never sent anywhere — there is no
+  send mechanism by construction; `taut report` aggregates it locally. No personal data:
+  no prompt content, no paths, no identities, no repository names. The level is chosen
+  at setup — `extended` (default; usage + lifecycle for evaluating the framework) or
+  `basic` (diagnostic minimum) — and switched any time with `taut apply --telemetry`.
 - **MCP without ceremony.** Servers launch through a workspace launcher that reads
   `.taut/local.env` itself — developers fill one file, export nothing.
 

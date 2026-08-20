@@ -37,6 +37,7 @@ const { TautError, fail } = await import('./lib/util.mts');
 const { cmdApply, cmdRepair, cmdRepoScaffold, cmdSetup, cmdStatus, cmdUpdate, cmdVerify } = await import('./lib/commands.mts');
 const { cmdCheck } = await import('./lib/check.mts');
 const { cmdPanel } = await import('./lib/panel.mts');
+const { cmdReport } = await import('./lib/report.mts');
 
 function parseArgs(argv) {
   const opts = { _: [], skillsOn: [], skillsOff: [], mcpOn: [], mcpOff: [], reposOn: [], reposOff: [], harnessOn: [], harnessOff: [] };
@@ -61,6 +62,9 @@ function parseArgs(argv) {
     else if (a === '--disable-harness') opts.harnessOff.push(argv[++i]);
     else if (a === '--mode') opts.mode = argv[++i];
     else if (a === '--chat-language') opts.chatLanguage = argv[++i];
+    else if (a === '--telemetry') opts.telemetry = argv[++i];
+    else if (a === '--since') opts.since = argv[++i];
+    else if (a === '--to') opts.to = argv[++i];
     else if (a === '--help' || a === '-h') opts.help = true;
     else opts._.push(a);
   }
@@ -80,8 +84,9 @@ Usage:
                   [--enable-mcp <id>]... [--disable-mcp <id>]...
                   [--connect-repo <name|path>]... [--disconnect-repo <name>]...
                   [--enable-harness <h>]... [--disable-harness <h>]...
-                  [--mode strict|normal] [--chat-language <code>]
+                  [--mode strict|normal] [--chat-language <code>] [--telemetry basic|extended]
   taut.mjs repo-scaffold [<repo>...] [--workspace <dir>] [--data <dir>]
+  taut.mjs report [--workspace <dir>] [--since YYYY-MM-DD] [--to YYYY-MM-DD] [--json]
   taut.mjs panel  [--workspace <dir>] [--port <n>]
 
 CORE vs DATA (split 2026-08-15): this repo is the ENGINE only — content (skills, agents,
@@ -242,9 +247,26 @@ panel   The ACTING local panel (D3): loopback-only web UI over the same core —
         Every compiled workspace also carries a "ui" launcher: from the workspace
         folder "node ui" opens its panel, "node ui <command>" scopes any command here.
 
+report  LOCAL telemetry aggregation over the workspace's own daily files
+        (memory/telemetry/YYYY-MM-DD.jsonl + the legacy usage.jsonl): sessions,
+        actualization lag per session, managed-invocation usage, denials by cause,
+        lifecycle chronology. Reads and prints ONLY on this machine — there is no send
+        mechanism; sharing the output is always a manual, deliberate act.
+
 The compiled workspace carries a HARD integrity gate (harness hooks + .taut/gate.mjs):
 a manually edited managed skill/agent is BLOCKED at invocation; core-artifact
-drift blocks prompts; every managed invocation is logged to memory/telemetry/usage.jsonl.
+drift blocks prompts.
+
+TELEMETRY (engine-owned; LOCAL-ONLY BY LAW): usage telemetry is written through ONE
+adapter (.taut/telemetry.mjs, next to the gate) into memory/telemetry/ — one file per
+LOCAL day. Files stay on this computer and are NEVER sent anywhere; no personal data is
+collected (no prompt content, no tool arguments, no paths, no machine/user/git
+identities, no env values, no repository names — repo toggles are logged as counts).
+The level is chosen at setup (answers key "telemetry"; non-interactive default applies):
+"extended" (default) records usage — allow-decisions per skill/agent/MCP, apply detail —
+for evaluating the framework; "basic" keeps the diagnostic minimum (errors, denials,
+lifecycle, actualization lag). Change later: taut apply --telemetry basic|extended.
+A pre-telemetry workspace adopts the default on its next update (surfaced in the output).
 
 Memory lives OUTSIDE the workspace: setup creates the sibling folder <workspace>-memory
 and links it into the workspace as memory/ (a symlink) — ticket memory, agent reports
@@ -272,6 +294,7 @@ try {
   else if (cmd === 'repair') await cmdRepair(opts);
   else if (cmd === 'apply') await cmdApply(opts);
   else if (cmd === 'repo-scaffold') await cmdRepoScaffold(opts);
+  else if (cmd === 'report') await cmdReport(opts);
   else if (cmd === 'panel') await cmdPanel(opts);
   else fail(`unknown command "${cmd}" (see --help)`);
 } catch (e) {
