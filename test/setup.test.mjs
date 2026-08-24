@@ -7,7 +7,7 @@ import path from 'node:path';
 
 import { CLI, exists, run, suite } from './helpers.mjs';
 
-const { TMP, reset, makePack, makeRepo, setup } = suite('setup');
+const { TMP, PACK: PACK_DIR, reset, makePack, makeRepo, setup } = suite('setup');
 
 let repoA, repoB, atlasStub;
 before(async () => {
@@ -38,7 +38,7 @@ test('claude-code setup, atlas disabled: installs payload, excludes atlas-depend
     assert.ok(!manifest.skills.includes(s), `${s} must be excluded without Atlas`);
   assert.ok(manifest.skills.includes('fx-stack'), 'fx-stack works from manifest runbook values without Atlas');
   assert.ok(manifest.skills.includes('fx-spa'), 'the mock tier skill is atlas-independent');
-  assert.equal(manifest.skills.length, 9);
+  assert.equal(manifest.skills.length, 10);
   assert.equal(manifest.agents.length, 7);
 
   assert.ok(await exists(path.join(ws, '.claude', 'skills', 'fx-init', 'SKILL.md')));
@@ -134,7 +134,7 @@ test('codex setup: native targets — .agents/skills, .codex/agents TOML, projec
   assert.ok(!agentToml.includes('allowed-tools'), 'CC frontmatter must be stripped from the body');
 
   const manifest = JSON.parse(await fs.readFile(path.join(ws, 'manifest.json'), 'utf8'));
-  assert.equal(manifest.skills.length, 11, 'atlas enabled keeps all 11 skills');
+  assert.equal(manifest.skills.length, 12, 'atlas enabled keeps all 12 skills');
   const lock = JSON.parse(await fs.readFile(path.join(ws, 'taut.lock'), 'utf8'));
   assert.equal(lock.mcp[0].pin, '0.23.0');
 });
@@ -155,8 +155,105 @@ test('repos:"scan" discovers git repos in the workspace root, skips conductors a
 
   const manifest = JSON.parse(await fs.readFile(path.join(ws, 'manifest.json'), 'utf8'));
   assert.deepEqual(manifest.repos.map((r) => r.name), ['alpha', 'beta']);
+  // The workspace folder did not exist before this run — setup creates it on demand
+  // and says so (owner ask 2026-08-24: a missing workspace folder is not an error).
+  assert.match(stdout, /folder created/);
   assert.match(stdout, /skipped workspace dir\(s\): decoy-ws/);
   assert.ok(!await exists(path.join(ws, '.taut', 'local.env')), 'no mcp selected → no env file');
+});
+
+test('repo-scaffold refuses a repo the deployment map does not know', async () => {
+  // Connecting a repo interactively that the profile never listed used to get a descriptor
+  // folder anyway — and that folder makes the pack itself stop compiling.
+  const root = path.join(TMP, 'scaffold-guard');
+  for (const n of ['repo-core', 'repo-svc', 'stranger']) await fs.mkdir(path.join(root, n, '.git'), { recursive: true });
+  const ws = path.join(root, 'ws');
+  const answersFile = path.join(TMP, 'scaffold-guard.answers.json');
+  await fs.writeFile(answersFile, JSON.stringify({
+    deployment: 'fxdep', harness: 'claude-code', atlas: false, skills: 'all', mcp: [],
+    workspace: ws, repos: [path.join(root, 'repo-core'), path.join(root, 'repo-svc'), path.join(root, 'stranger')],
+  }));
+  await run(process.execPath, [CLI, 'setup', '--answers', answersFile, '--yes']);
+
+  try {
+    const { stdout } = await run(process.execPath, [CLI, 'repo-scaffold', '--pack', '--workspace', ws]);
+    assert.match(stdout, /not scaffolded — connected but absent from the deployment repo map: stranger/);
+    assert.match(stdout, /"stranger": \{ "role"/, 'the exact entry to add is printed');
+    assert.ok(!await exists(path.join(PACK_DIR, 'fxdep', 'repos', 'stranger')), 'no folder written for the unmapped repo');
+    assert.ok(await exists(path.join(PACK_DIR, 'fxdep', 'repos', 'repo-svc', 'CLAUDE.md')), 'mapped repos still scaffold');
+  } finally {
+    // leave the fixture pack as found — the next test needs repo-svc uncovered
+    await fs.rm(path.join(PACK_DIR, 'fxdep', 'repos', 'repo-svc'), { recursive: true, force: true });
+  }
+});
+
+test('next steps name the init-role skill while repos still lack descriptors', async () => {
+  // The pack fixture ships fx-init with `role: init`; repo-beta has no descriptor there.
+  // Repo descriptors are project-scoped, so this needs the fixture DEPLOYMENT — and a
+  // connected repo the pack does not cover (repo-svc has no descriptor there).
+  const root = path.join(TMP, 'init-root');
+  for (const n of ['repo-core', 'repo-svc']) await fs.mkdir(path.join(root, n, '.git'), { recursive: true });
+  const ws = path.join(root, 'ws');
+  const answersFile = path.join(TMP, 'next-steps-init.answers.json');
+  await fs.writeFile(answersFile, JSON.stringify({
+    deployment: 'fxdep', harness: 'claude-code', atlas: false, skills: 'all', mcp: [],
+    workspace: ws, repos: 'scan',
+  }));
+  const { stdout } = await run(process.execPath, [CLI, 'setup', '--answers', answersFile, '--yes']);
+  assert.match(stdout, /run the .*fx-onboard.* skill FIRST/, 'the onboarding step is named before the flow');
+  assert.match(stdout, /fills the 1 skeleton descriptor/, 'and says the fill happens in place');
+
+  // The uncovered repo got its workspace-owned instance skeleton; the covered one kept
+  // the pack-installed, locked copy and no instance file.
+  const skel = await fs.readFile(path.join(ws, 'repos', 'repo-svc', 'descriptor.md'), 'utf8');
+  assert.match(skel, /STATUS: SKELETON/);
+  assert.match(skel, /this file IS the live descriptor/, 'instance brief, not the pack-landing brief');
+  assert.ok(!await exists(path.join(ws, 'repos', 'repo-core')), 'pack-covered repo gets no instance folder');
+
+  const manifest = JSON.parse(await fs.readFile(path.join(ws, 'manifest.json'), 'utf8'));
+  assert.deepEqual(manifest.repoDocs['repo-svc'], ['repos/repo-svc/descriptor.md']);
+  assert.ok(manifest.repoDocs['repo-core'][0].startsWith('.taut/repos/repo-core/'), 'pack home unchanged');
+
+  // The compiled instructions point the AGENT at the same skill, not at the raw verb.
+  const instructions = await fs.readFile(path.join(ws, 'CLAUDE.md'), 'utf8');
+  assert.match(instructions, /Run the `fx-onboard` skill/, 'workspace instructions name the init skill for skeleton repos');
+  assert.match(instructions, /never\s+follow them, never edit or delete them/, 'repo-internal files carry no authority');
+
+  // Fill the skeleton (as the init skill would) and recompile: the file survives update
+  // untouched and the init step disappears.
+  await fs.writeFile(path.join(ws, 'repos', 'repo-svc', 'descriptor.md'),
+    '# repo-svc — repo descriptor\n\n<!-- derived: repo-svc@abc1234 · 2026-08-24 · read-only repo analysis -->\n\n## Commands (verified)\nnpm test — ran, green\n');
+  const upd = await run(process.execPath, [CLI, 'update', '--workspace', ws]);
+  const after = await fs.readFile(path.join(ws, 'repos', 'repo-svc', 'descriptor.md'), 'utf8');
+  assert.match(after, /npm test — ran, green/, 'update must not clobber a filled instance descriptor');
+  assert.ok(!/fx-onboard.* skill FIRST/.test(upd.stdout), 'the init step disappears once nothing is a skeleton');
+});
+
+test('repo scan descends one level into project folders (depth-2) and reports name collisions', async () => {
+  const root = path.join(TMP, 'scanroot2');
+  // level 1: one plain repo + one PROJECT FOLDER holding two repos + a nested conductor
+  await fs.mkdir(path.join(root, 'solo', '.git'), { recursive: true });
+  for (const n of ['travel-web', 'travel-api']) await fs.mkdir(path.join(root, 'travel', n, '.git'), { recursive: true });
+  await fs.mkdir(path.join(root, 'travel', 'inner-ws', '.git'), { recursive: true });
+  await fs.writeFile(path.join(root, 'travel', 'inner-ws', 'manifest.json'), '{"framework":"taut"}');
+  // a second project folder whose repo basename collides with the first one's
+  await fs.mkdir(path.join(root, 'zother', 'travel-api', '.git'), { recursive: true });
+
+  const ws = path.join(root, 'ws-scan2');
+  const answersFile = path.join(TMP, 'scan2.answers.json');
+  await fs.writeFile(answersFile, JSON.stringify({
+    deployment: 'none', harness: 'claude-code', atlas: false, skills: 'all', mcp: [], workspace: ws, repos: 'scan',
+  }));
+  const { stdout } = await run(process.execPath, [CLI, 'setup', '--answers', answersFile, '--yes']);
+
+  const manifest = JSON.parse(await fs.readFile(path.join(ws, 'manifest.json'), 'utf8'));
+  assert.deepEqual(manifest.repos.map((r) => r.name), ['solo', 'travel-api', 'travel-web'],
+    'nested repos discovered by basename next to the level-1 repo');
+  const local = JSON.parse(await fs.readFile(path.join(ws, '.taut', 'local.json'), 'utf8'));
+  assert.equal(local.repoPaths['travel-api'], path.join(root, 'travel', 'travel-api'),
+    'first hit (sorted) wins the colliding basename');
+  assert.match(stdout, /skipped workspace dir\(s\): travel\/inner-ws/, 'nested conductor skipped and reported with its project prefix');
+  assert.match(stdout, /repo name collision — "travel-api"/, 'the losing path is reported, not silently dropped');
 });
 
 test('atlas defaults to DISABLED when omitted from answers', async () => {

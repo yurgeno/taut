@@ -14,6 +14,7 @@ import { atlasRequired, neededAgents } from './artifacts.mts';
 import { askText, banner } from './tui.mts';
 import { cfgFromWorkspace, gatherConfig, isConductorDir, listDeployments, normalizeHarnesses, relintRepoBindings } from './config.mts';
 import { TELEMETRY_LEVELS, createTelemetry } from '../gate/telemetry.mjs';
+import { detectStacks } from './stacks.mts';
 import { chatChoice } from './manifest.mts';
 import { install, memoryRootFor, migrateLegacyLayout, scanMemberInstructionFiles } from './install.mts';
 import { verify, writeLock } from './lock.mts';
@@ -36,7 +37,10 @@ export async function cmdSetup(opts: CliOpts): Promise<void> {
     const a = (await askText('Data pack (skills/agents/docs/catalog source)', dataRoot)).trim();
     dataRoot = path.resolve(expandHome(a || dataRoot));
   }
-  if (!await exists(dataRoot)) fail(`data pack not found: ${dataRoot}`);
+  if (!await exists(dataRoot)) fail(`data pack not found: ${dataRoot}
+  The engine ships no content — install a data pack first. The community starter pack:
+    git clone https://github.com/yurgeno/taut-data-community.git ~/taut-data
+  then re-run setup (or point --data at any pack folder).`);
   initData(dataRoot);
   const cfg = await gatherConfig(answers, interactive);
 
@@ -54,12 +58,45 @@ export async function cmdSetup(opts: CliOpts): Promise<void> {
   await compileWorkspace(cfg);
 }
 
+// Workspace-owned INSTANCE descriptors. Every connected repo the pack does not cover
+// gets `repos/<name>/descriptor.md` in the WORKSPACE itself — created as a skeleton at
+// compile, filled in place by the pack's init-role skill, read by every session. These
+// are instance data like memory/: never lock artifacts (no external source of truth to
+// verify against — locking would turn every legitimate edit into "drift"), never swept,
+// never overwritten once non-empty. Pack-covered repos keep the distributed, hash-locked
+// copy under .taut/repos/ — the two homes never overlap for one repo.
+export async function ensureInstanceDescriptors(cfg: Cfg): Promise<void> {
+  const docs: NonNullable<Cfg['wsRepoDocs']> = [];
+  for (const r of cfg.repos) {
+    if (cfg.catalog.repoDocs.has(r.name)) continue;
+    const rel = `repos/${r.name}/descriptor.md`;
+    const abs = path.join(cfg.workspace, rel);
+    let body = await readIfExists(abs, 256 * 1024);
+    if (body === null || body.trim() === '') {
+      body = scaffoldDescriptor(r.name, r.path, await detectStacks(r.path), { instance: true });
+      await fs.mkdir(path.dirname(abs), { recursive: true });
+      await fs.writeFile(abs, body);
+    }
+    docs.push({ repo: r.name, file: rel, skeleton: body.includes('STATUS: SKELETON') });
+  }
+  cfg.wsRepoDocs = docs;
+}
+
 export async function compileWorkspace(cfg: Cfg, { verb = 'compiled', extra = null }: { verb?: string; extra?: Record<string, any> | null } = {}): Promise<void> {
+  // The workspace folder (and its memory sibling, in install) is created on demand —
+  // pointing setup at a folder that does not exist yet is a first-class path, not an
+  // error. Explicit HERE at the chokepoint: creation must not depend on which artifact
+  // happens to be written first.
+  const wsCreated = !await exists(cfg.workspace);
+  if (wsCreated) await fs.mkdir(cfg.workspace, { recursive: true });
   // Pre-rename FEDERATION workspaces migrate in place on their first recompile: the old
   // lock is read as the sweep source, instance files move .federation/ → .taut/, and the
   // legacy layout is swept below like any renamed payload.
   const migrated = await migrateLegacyLayout(cfg.workspace);
   const oldLock = await readLock(cfg.workspace);
+  // Instance descriptors BEFORE install: the rendered instructions and the manifest
+  // index must already know which repos are workspace-covered and which are skeletons.
+  await ensureInstanceDescriptors(cfg);
   const artifacts = await install(cfg);
   const memberFiles = await scanMemberInstructionFiles(cfg);
 
@@ -137,7 +174,7 @@ export async function compileWorkspace(cfg: Cfg, { verb = 'compiled', extra = nu
 
   const p = (s: string) => process.stdout.write(s + '\n');
   p('');
-  p(`${green('✔')} ${bold(`TAUT workspace ${verb}`)} ${dim('·')} ${cfg.workspace}`);
+  p(`${green('✔')} ${bold(`TAUT workspace ${verb}`)} ${dim('·')} ${cfg.workspace}${wsCreated ? dim(' · folder created') : ''}`);
   const fw = `${lock.framework.commit?.slice(0, 7) ?? 'no-git'}${lock.framework.canonical ? '' : ` ${yellow('(NON-CANONICAL: dirty tree)')}`}`;
   const dt = `${lock.data?.pack ? `${lock.data.pack} ` : ''}${lock.data?.commit?.slice(0, 7) ?? 'no-git'}${lock.data?.canonical !== false ? '' : ` ${yellow('(NON-CANONICAL: dirty tree)')}`}`;
   p(`  ${dim('harness')}   ${cfg.harnesses.join(' + ')}   ${dim('mode')} ${cfg.mode === 'strict' ? bold('STRICT') : 'normal'}   ${dim('atlas')} ${cfg.atlas ? (cfg.atlasRoot ? `enabled · ${cfg.atlasRoot}` : 'enabled') : 'disabled'}   ${dim('deployment')} ${cfg.profile?.name ?? 'generic'}   ${dim('framework')} ${fw}`);
@@ -148,15 +185,14 @@ export async function compileWorkspace(cfg: Cfg, { verb = 'compiled', extra = nu
   const repoDocFiles = artifacts.filter((a) => a.id.startsWith('.taut/repos/'));
   if (repoDocFiles.length) {
     const covered = [...new Set(repoDocFiles.map((a) => a.id.split('/')[2]))];
-    p(`  ${dim('repo docs')} ${repoDocFiles.length} file(s) across ${covered.length} repo(s) ${dim(`· ${covered.join(', ')}`)}`);
+    p(`  ${dim('repo docs')} ${repoDocFiles.length} pack file(s) across ${covered.length} repo(s) ${dim(`· ${covered.join(', ')} · installed to .taut/repos/, integrity-locked`)}`);
   }
-  // Auto-init flag: connected repos the pack does not cover — project mode only
-  // (repo descriptors are project-scoped; `deployment: none` has no repos/ home).
-  const noDocs = cfg.profile?.dir
-    ? cfg.repos.map((r) => r.name).filter((n) => !cfg.catalog.repoDocs.has(n))
-    : [];
-  if (noDocs.length)
-    p(`  ${dim('repo docs')} ${yellow(`no descriptors for ${noDocs.length} repo(s):`)} ${noDocs.join(', ')} ${dim('· auto-init: node ui repo-scaffold')}`);
+  // Workspace-owned instance descriptors: scaffolded above for every repo the pack does
+  // not cover; a skeleton means the repo's knowledge has not been generated yet.
+  const wsDocs = cfg.wsRepoDocs ?? [];
+  const noDocs = wsDocs.filter((d) => d.skeleton).map((d) => d.repo);
+  if (wsDocs.length)
+    p(`  ${dim('repo docs')} ${wsDocs.length} workspace-owned ${dim('· repos/<name>/descriptor.md — instance files, edited in place, never locked')}${noDocs.length ? ` ${yellow(`· ${noDocs.length} still SKELETON: ${noDocs.join(', ')}`)}` : ''}`);
   p(`  ${dim('mcp')}       ${cfg.mcp.length ? cfg.mcp.map((id) => `${id}${dim(`@${MCP_CATALOG[id].pin}`)}`).join(', ') : 'none'}`);
   if (removed.length) p(`  ${dim('removed')}   ${removed.length} stale artifact(s) ${dim(`· ${removed.join(', ')}`)}`);
   p(`  ${dim('memory')}    ${memoryRootFor(cfg.workspace)} ${dim('· instance data, never touched; workspace memory/ is a symlink')}`);
@@ -164,6 +200,8 @@ export async function compileWorkspace(cfg: Cfg, { verb = 'compiled', extra = nu
   if (oldLock && oldLock.telemetry === undefined)
     p(`  ${dim('telemetry')} ${yellow('adopted the default "extended"')} ${dim('(pre-telemetry workspace) — change: taut apply --telemetry basic')}`);
   p(`  ${dim('repos')}     ${cfg.repos.length} ${dim(`· ${cfg.repos.map((r) => r.name).join(', ')}`)}`);
+  if (cfg.stacks?.length)
+    p(`  ${dim('stacks')}    ${cfg.stacks.join(' + ')} ${dim('· declared ?? detected per connected repo; stack-gated artifact branches follow this set')}`);
   for (const h of cfg.harnesses)
     p(`  ${dim('gate')}      ${green('ACTIVE')} ${dim(h === 'codex'
       ? '· codex: PreToolUse + prompt sweep + session banner (.codex/config.toml hooks)'
@@ -183,7 +221,19 @@ export async function compileWorkspace(cfg: Cfg, { verb = 'compiled', extra = nu
     if (cfg.harnesses.includes('claude-code')) p(`  ${++stepNo}. On first open, approve the workspace .mcp.json servers.`);
     if (cfg.harnesses.includes('codex')) p(`  ${++stepNo}. TRUST the project on first Codex open (loads .codex/config.toml MCP + project artifacts).`);
   }
-  p(`  ${++stepNo}. Open the workspace with ${cfg.harnesses.join(' or ')} and run the flow (stage skills).`);
+  // Onboarding step: named only when the pack ships a skill claiming the `init` ROLE and
+  // this workspace still has repos without descriptors — content roles, not content names
+  // (core hardcodes no pack skill). Once every connected repo is covered, the step is
+  // pointless and disappears on its own.
+  const initSkill = cfg.skills.find((s) => cfg.catalog.skills.get(s)?.meta.role === 'init') ?? null;
+  if (initSkill && noDocs.length) {
+    p(`  ${++stepNo}. Open the workspace with ${cfg.harnesses.join(' or ')} and run the ${bold(initSkill)} skill FIRST`);
+    p(`     ${dim(`— it fills the ${noDocs.length} skeleton descriptor(s) under repos/ with that repo's working knowledge`)}`);
+    p(`     ${dim('(verified commands, layout, gotchas), in place — you review the files, nothing else to land.')}`);
+    p(`  ${++stepNo}. After that, run the flow (stage skills) for actual work.`);
+  } else {
+    p(`  ${++stepNo}. Open the workspace with ${cfg.harnesses.join(' or ')} and run the flow (stage skills).`);
+  }
   p(`  From the workspace folder: ${bold('node ui')} opens the panel · ${bold('node ui verify')} / ${bold('node ui status')} / any command, scoped here.`);
 }
 
@@ -363,7 +413,13 @@ export async function cmdUpdate(opts: CliOpts): Promise<void> {
   // when EITHER moved; a non-git pack (or v1 lock) leaves the axis out.
   const dataPin = lock?.data?.commit ?? null;
   const dataDelta = dataPin ? repoDelta(requireData(), dataPin) : null;
-  const dataCurrent = dataPin ? dataDelta!.behind === 0 : true;
+  // "Current" on the data axis means the pack's CONTENT is what the lock was built from —
+  // not merely that its commit did not move. A dirty pack (freshly written descriptors,
+  // an added skill) or a pack with no git at all cannot make that claim, so those never
+  // short-circuit: recompiling is idempotent and cheap, while a false "already current"
+  // sends the owner hunting for why their new pack file did not install.
+  const dataDirty = gitInfoOwn(requireData()).dirty;
+  const dataCurrent = dataPin ? (dataDelta!.behind === 0 && dataDirty === false) : false;
   const drifted = lock ? await driftedArtifacts(ws, lock) : [];
 
   // --data-only: the everyday content actualization — re-pin the
@@ -451,20 +507,58 @@ export async function cmdRepoScaffold(opts: CliOpts): Promise<void> {
   if (!await exists(path.join(ws, 'manifest.json'))) fail(`no manifest.json in ${ws} — not a TAUT workspace`);
   await initDataFor({ explicit: opts.data ?? null, ws });
   const cfg = await cfgFromWorkspace(ws);
+
+  // DEFAULT: workspace-owned instance skeletons — the same ensure step every compile
+  // runs, callable on demand (e.g. right after connecting a repo). Descriptors live in
+  // the WORKSPACE; --pack below is the pack-authoring mode for deployments that ship
+  // reviewed, integrity-locked descriptors from the data pack.
+  if (!opts.pack) {
+    const before = new Set<string>();
+    for (const r of cfg.repos)
+      if (await exists(path.join(ws, 'repos', r.name, 'descriptor.md'))) before.add(r.name);
+    await ensureInstanceDescriptors(cfg);
+    const docs = cfg.wsRepoDocs ?? [];
+    const created = docs.filter((d) => !before.has(d.repo));
+    const pending = docs.filter((d) => d.skeleton);
+    const pr = (t: string) => process.stdout.write(t + '\n');
+    if (created.length) {
+      pr(`${green('✔')} ${bold(`scaffolded ${created.length} workspace descriptor skeleton(s)`)}`);
+      for (const d of created) pr(`  ${d.file}`);
+    } else {
+      pr(`${green('✔')} nothing to scaffold — every connected repo already has a descriptor (pack-installed or workspace-owned).`);
+    }
+    if (pending.length) pr(`  ${dim(`still SKELETON: ${pending.map((d) => d.repo).join(', ')} — fill by the embedded brief (the pack's init skill does this)`)}`);
+    return;
+  }
+
   if (!cfg.profile?.dir)
-    fail('repo descriptors are project-scoped — this workspace has no deployment config in the pack (repos/ lives inside the project folder)');
+    fail('--pack: repo descriptors in the pack are project-scoped — this workspace has no deployment config (repos/ lives inside the project folder)');
   const connected = new Map(cfg.repos.map((r) => [r.name, r]));
   const targets = opts._.slice(1);
   for (const t of targets)
     if (!connected.has(t)) fail(`repo "${t}" is not connected in this workspace (connected: ${[...connected.keys()].join(', ') || 'none'})`);
   const names = targets.length ? targets : [...connected.keys()].filter((n) => !cfg.catalog.repoDocs.has(n));
 
+  // A descriptor folder is only legal for a repo the DEPLOYMENT knows: the compile treats
+  // `<project>/repos/<name>/` without a matching repo-map entry as a pack error. Scaffolding
+  // one anyway produced a pack that no longer compiles — the failure landed later, on
+  // someone else's `update`. Refuse here instead, naming the exact entry to add.
+  // Read the LIVE deployment, not cfg.profile: the reconstructed profile folds every
+  // connected repo into its known map (repair fidelity), which would make this check
+  // vacuous exactly for the repo connected ad hoc.
+  const live = (await listDeployments()).find((d) => d.name === cfg.profile!.name);
+  const knownRepos = new Set([...(live?.repos?.mandatory ?? []), ...Object.keys(live?.repos?.known ?? {})]);
+  const unmapped = knownRepos.size ? names.filter((n) => !knownRepos.has(n)) : [];
+
   const made: string[] = []; const skipped: string[] = [];
   for (const n of names) {
+    if (unmapped.includes(n)) continue;
     const file = path.join(cfg.profile.dir, 'repos', n, 'CLAUDE.md');
     if (cfg.catalog.repoDocs.has(n) || await exists(file)) { skipped.push(n); continue; }
     await fs.mkdir(path.dirname(file), { recursive: true });
-    await fs.writeFile(file, scaffoldDescriptor(n, connected.get(n)!.path));
+    // The scaffold moment doubles as the stack SCAN moment — the skeleton records the
+    // detected toolchain(s) for the distilling agent to verify.
+    await fs.writeFile(file, scaffoldDescriptor(n, connected.get(n)!.path, await detectStacks(connected.get(n)!.path)));
     made.push(`${cfg.profile.name}/repos/${n}/CLAUDE.md`);
   }
   const p = (s: string) => process.stdout.write(s + '\n');
@@ -477,6 +571,12 @@ export async function cmdRepoScaffold(opts: CliOpts): Promise<void> {
     p(`${green('✔')} nothing to scaffold — ${targets.length ? 'the requested repo(s) already have descriptors' : 'every connected repo already has descriptors in the pack'}.`);
   }
   if (skipped.length) p(`  ${dim(`skipped (already covered): ${skipped.join(', ')}`)}`);
+  if (unmapped.length) {
+    p(`\n${yellow('!')} not scaffolded — connected but absent from the deployment repo map: ${unmapped.join(', ')}`);
+    p(`  ${dim(`A descriptor under ${cfg.profile.name}/repos/<name>/ needs its entry, or the pack stops compiling.`)}`);
+    p(`  ${dim(`Add to ${cfg.profile.name}/deployment.json → repos.known, then re-run:`)}`);
+    for (const n of unmapped) p(`    ${dim(`"${n}": { "role": "TODO — this repo's role in the landscape" }`)}`);
+  }
 }
 
 // ---------------------------------------------------------------- apply (toggles)
@@ -568,23 +668,9 @@ export async function cmdApply(opts: CliOpts): Promise<void> {
     added.push(name);
   }
   if (opts.reposOff.length || added.length) {
-    if (cfg.profile?.dir) {
-      const known = new Set([...(cfg.profile.repos?.mandatory ?? []), ...Object.keys(cfg.profile.repos?.known ?? {})]);
-      for (const n of added) {
-        if (cfg.catalog.repoDocs.has(n)) continue;
-        if (known.size && !known.has(n)) {
-          cfg.warnings.push(`repo "${n}" is not in the deployment repo map — descriptor not scaffolded (add it to deployment.json first)`);
-          continue;
-        }
-        const file = path.join(cfg.profile.dir, 'repos', n, 'CLAUDE.md');
-        if (!await exists(file)) {
-          await fs.mkdir(path.dirname(file), { recursive: true });
-          await fs.writeFile(file, scaffoldDescriptor(n, cfg.repos.find((r) => r.name === n)!.path));
-        }
-        cfg.catalog.repoDocs.set(n, [{ file: 'CLAUDE.md', path: file }]);
-        process.stdout.write(`  scaffolded a descriptor skeleton for "${n}" into the pack — fill it by its embedded brief, then commit the pack\n`);
-      }
-    }
+    // A newly connected repo needs no pack write: the compile below scaffolds its
+    // workspace-owned instance descriptor (repos/<name>/descriptor.md) as part of
+    // ensureInstanceDescriptors — pack authoring stays an explicit act (repo-scaffold --pack).
     relintRepoBindings(cfg);
     // An "all" selection keeps meaning ALL: skills whose repo bindings the new connected
     // set satisfies (minus explicit exclusions) re-enter, mirroring update's payload rule.

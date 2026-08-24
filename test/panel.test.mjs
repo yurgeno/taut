@@ -100,8 +100,8 @@ test('panel: state contract, token guard, apply + repair through the server', as
     assert.match(await page.text(), /TAUT panel/);
 
     const state = await (await fetch(`${base}/api/state`)).json();
-    assert.equal(state.skills.length, 11, 'the whole catalog is listed');
-    assert.equal(state.skills.filter((s) => s.installed).length, 9);
+    assert.equal(state.skills.length, 12, 'the whole catalog is listed');
+    assert.equal(state.skills.filter((s) => s.installed).length, 10);
     const ku = state.skills.find((s) => s.name === 'fx-knowledge');
     assert.equal(ku.installed, false);
     assert.equal(ku.blocked, 'requires atlas', 'blocked skills carry the reason');
@@ -255,17 +255,17 @@ test('apply: repo toggles — disconnect sweeps repo data, connect re-installs o
   assert.deepEqual(m.runbooks.map((r) => r.name), ['ops-shared', 'spa-mock', 'stack-basic', 'stack-pdf']);
   assert.ok(await exists(path.join(ws, '.claude', 'skills', 'up-pdf', 'SKILL.md')), 'wrapper regenerated');
 
-  // Connect an UNCOVERED known repo: a skeleton scaffolds into the pack AND installs in
-  // the same compile (add ⇒ a descriptor exists).
+  // Connect an UNCOVERED known repo: the compile scaffolds its WORKSPACE-OWNED instance
+  // descriptor (add ⇒ a descriptor exists); the pack is never written by a connect.
   await fs.mkdir(path.join(root, 'repo-opt', '.git'), { recursive: true });
   const r2 = await run(process.execPath, [CLI, 'apply', '--workspace', ws, '--connect-repo', 'repo-opt']);
-  assert.match(r2.stdout, /scaffolded a descriptor skeleton for "repo-opt"/);
-  assert.match(await fs.readFile(path.join(pack2, 'fxdep', 'repos', 'repo-opt', 'CLAUDE.md'), 'utf8'),
-    /STATUS: SKELETON/);
-  assert.match(await fs.readFile(path.join(ws, '.taut', 'repos', 'repo-opt', 'CLAUDE.md'), 'utf8'),
-    /STATUS: SKELETON/, 'skeleton installs immediately');
+  assert.match(r2.stdout, /still SKELETON: .*repo-opt/);
+  assert.ok(!await exists(path.join(pack2, 'fxdep', 'repos', 'repo-opt')), 'connect never writes the pack');
+  assert.match(await fs.readFile(path.join(ws, 'repos', 'repo-opt', 'descriptor.md'), 'utf8'),
+    /STATUS: SKELETON/, 'instance skeleton exists immediately');
   m = await readManifest(ws);
   assert.ok(m.repos.some((r) => r.name === 'repo-opt'));
+  assert.deepEqual(m.repoDocs['repo-opt'], ['repos/repo-opt/descriptor.md']);
   await run(process.execPath, [CLI, 'verify', '--workspace', ws]);
 
   // Panel state over a PROFILE workspace: mandatory locked, skeleton surfaced.
@@ -279,9 +279,11 @@ test('apply: repo toggles — disconnect sweeps repo data, connect re-installs o
     assert.equal(opt.skeleton, true, 'unfilled skeleton surfaced for distillation');
     assert.ok(core.descriptorFiles >= 1 && core.skeleton === false, 'real descriptors are not skeletons');
 
-    // Data-only actualization through the panel: the pack moves (the scaffolded skeleton
-    // lands as a commit) → /api/update {dataOnly} re-pins the DATA axis alone.
-    await commitAll(pack2, 'skeleton landed');
+    // Data-only actualization through the panel: the pack moves (a doc lands as a
+    // commit — connects no longer write the pack) → /api/update {dataOnly} re-pins the
+    // DATA axis alone.
+    await fs.writeFile(path.join(pack2, 'docs', 'NOTE.md'), '# a pack change\n');
+    await commitAll(pack2, 'doc landed');
     const upd = await (await fetch(`${base}/api/update`, {
       method: 'POST',
       headers: { 'content-type': 'application/json', 'x-taut-token': p.token },

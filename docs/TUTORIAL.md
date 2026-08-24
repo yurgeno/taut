@@ -3,9 +3,16 @@
 This walkthrough builds a complete TAUT deployment for a small React project: three
 skills launched in sequence (**analyze → implement → review**), a subagent behind each,
 one repo, one runbook, a documented flow, per-harness model profiles, and
-context7 as the only MCP server. The finished result ships in this repo as
-**`taut-data/react-demo/`** — every file below exists there, and the test suite
-compiles it on every `npm test`, so the tutorial cannot drift from reality.
+context7 as the only MCP server. Every file appears in full below — author them as you
+read and you end the tutorial with a working pack (the same project also lives in the
+engine's test fixtures, compiled on every `npm test`, so the tutorial cannot drift).
+
+**Just want to RUN TAUT, not author content?** Install the public starter pack instead
+— [taut-data-community](https://github.com/yurgeno/taut-data-community): a generic
+three-stage dev flow plus a `workspace-init` skill that studies YOUR repositories and
+generates their descriptors. `git clone
+https://github.com/yurgeno/taut-data-community.git ~/taut-data`, then `node taut.mjs
+setup`. This tutorial is for the day you outgrow it and author your own.
 
 Reference docs as you go: [PACK.md](PACK.md) (every element kind + the full
 `deployment.json` reference) and [HANDBOOK.md](HANDBOOK.md) (operating the compiled
@@ -260,7 +267,8 @@ the pack-level one. Keep laws few and enforceable.
 
 ## 10. Compile it
 
-Stub the fictional repo, then run setup against the bundled pack:
+Author the files above into a pack folder (`/tmp/my-pack/react-demo/…`), stub the
+fictional repo, then run setup against your pack:
 
 ```bash
 git init -q /tmp/react-land/react-app
@@ -273,7 +281,7 @@ cat > /tmp/react-land/answers.json <<'EOF'
   "mcp": ["context7"],
   "atlas": false, "mode": "normal" }
 EOF
-node taut.mjs setup --answers /tmp/react-land/answers.json --yes
+node taut.mjs setup --data /tmp/my-pack --answers /tmp/react-land/answers.json --yes
 ```
 
 (Interactively: `node taut.mjs setup`, pick `react-demo`, check the same boxes.

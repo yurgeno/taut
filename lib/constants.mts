@@ -32,10 +32,11 @@ export const langName = (c: string): string => LANG_NAMES[c] ?? c;
 //      pack sits at the same level as the workspace and its `<ws>-memory` folder, so a
 //      landscape root reads `{repos…, ws, ws-memory, taut-data}`; ONE pack serves every
 //      workspace of that landscape
-//   5. ~/taut-data when it exists (global fallback)
+//   5. ~/taut-data when it exists (global fallback) — where the setup error suggests
+//      cloning the community starter pack (github.com/yurgeno/taut-data-community)
 //   6. FW_ROOT when it still carries skills/ (pre-split single-repo layout)
-//   7. FW_ROOT/taut-data — the bundled EXAMPLE pack (the react-demo tutorial project),
-//      so a bare checkout compiles a workspace out of the box
+// The engine ships NO content of its own: when the chain finds nothing, setup fails
+// with the clone instruction (the machine default is returned as the suggested spot).
 export async function resolveDataRoot({ explicit = null, ws = null }: { explicit?: string | null; ws?: string | null } = {}): Promise<string> {
   if (explicit) return path.resolve(expandHome(explicit));
   if (ws) {
@@ -54,7 +55,7 @@ export async function resolveDataRoot({ explicit = null, ws = null }: { explicit
   const machineDefault = path.join(process.env.HOME ?? '', 'taut-data');
   if (await exists(machineDefault)) return machineDefault;
   if (await exists(path.join(FW_ROOT, 'skills'))) return FW_ROOT;
-  return path.join(FW_ROOT, 'taut-data');
+  return machineDefault;
 }
 
 // Initialized by initData() before any command dispatch; loud failure otherwise.

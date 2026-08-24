@@ -47,6 +47,9 @@ export async function writeLock(cfg: Cfg, artifacts: ArtifactRow[]): Promise<Loc
     // Telemetry level rides the lock exactly like mode — the gate's config root; no
     // extra reads on the event path. Absent (legacy lock) = extended, the default.
     telemetry: cfg.telemetry === 'basic' ? 'basic' : 'extended',
+    // Resolved workspace stacks — verify --source rebuilds the stack-* marker gates
+    // from this, the same way atlas/mcp-docs gates rebuild from the lock.
+    ...(cfg.stacks?.length ? { stacks: cfg.stacks } : {}),
     artifacts,
     mcp: cfg.mcp.map((id) => {
       const c = MCP_CATALOG[id];
@@ -105,7 +108,11 @@ export async function verify(ws: string, { json = false, source = false }: { jso
         // pass to the pinned source; the gate values are reconstructed from the lock
         // itself (must mirror capabilityGates in lib/install.mts).
         if (a.transform) {
-          const gates = { atlas: Boolean(lock.atlas), 'mcp-docs': (lock.mcp ?? []).some((m) => m.role === 'docs') };
+          const gates = {
+            atlas: Boolean(lock.atlas),
+            'mcp-docs': (lock.mcp ?? []).some((m) => m.role === 'docs'),
+            ...Object.fromEntries((lock.stacks ?? []).map((s) => [`stack-${s}`, true])),
+          };
           atPin = Buffer.from(applyMarkers(atPin.toString('utf8'), gates, a.source!));
         }
         let actual: string | null = null;

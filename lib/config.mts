@@ -62,21 +62,45 @@ export async function isConductorDir(p: string): Promise<boolean> {
   return false;
 }
 
-export async function scanRepos(root: string, excludeAbs: string[] = []): Promise<{ repos: Repo[]; skippedConductors: string[] }> {
+// Depth-2 scan: level 1 finds git repos directly in the landscape root; a level-1 dir
+// that is NOT a git repo and NOT a workspace is treated as a possible PROJECT FOLDER and
+// searched one level deeper (grouping a project's repos in a folder is common — both
+// pilot projects have that shape). Names stay basenames; a basename claimed twice keeps
+// the first hit (sorted order = deterministic) and reports the loser in `collisions` —
+// connect the other one by path (apply --connect-repo <path>) if it was the wanted one.
+export async function scanRepos(root: string, excludeAbs: string[] = []): Promise<{ repos: Repo[]; skippedConductors: string[]; collisions: string[] }> {
   const repos: Repo[] = [];
   const skippedConductors: string[] = [];
-  let entries: import('node:fs').Dirent[];
-  try { entries = await fs.readdir(root, { withFileTypes: true }); } catch { return { repos, skippedConductors }; }
-  for (const e of entries) {
-    if (!e.isDirectory() || e.name.startsWith('.')) continue;
+  const collisions: string[] = [];
+  const seen = new Map<string, string>();
+  const consider = async (name: string, abs: string, via: string | null) => {
+    if (await isConductorDir(abs)) { skippedConductors.push(via ? `${via}/${name}` : name); return; }
+    const kept = seen.get(name);
+    if (kept) { collisions.push(`"${name}": kept ${kept}, skipped ${abs}`); return; }
+    seen.set(name, abs);
+    repos.push({ name, path: abs });
+  };
+  const listDirs = async (dir: string): Promise<import('node:fs').Dirent[]> => {
+    try {
+      return (await fs.readdir(dir, { withFileTypes: true }))
+        .filter((e) => e.isDirectory() && !e.name.startsWith('.'))
+        .sort((a, b) => a.name.localeCompare(b.name));
+    } catch { return []; }
+  };
+  for (const e of await listDirs(root)) {
     const abs = path.join(root, e.name);
     if (excludeAbs.includes(abs)) continue;
-    if (!await exists(path.join(abs, '.git'))) continue;
+    if (await exists(path.join(abs, '.git'))) { await consider(e.name, abs, null); continue; }
     if (await isConductorDir(abs)) { skippedConductors.push(e.name); continue; }
-    repos.push({ name: e.name, path: abs });
+    for (const sub of await listDirs(abs)) {
+      const subAbs = path.join(abs, sub.name);
+      if (excludeAbs.includes(subAbs)) continue;
+      if (!await exists(path.join(subAbs, '.git'))) continue;
+      await consider(sub.name, subAbs, e.name);
+    }
   }
   repos.sort((a, b) => a.name.localeCompare(b.name));
-  return { repos, skippedConductors };
+  return { repos, skippedConductors, collisions };
 }
 
 // ---------------------------------------------------------------- config gathering
@@ -174,7 +198,7 @@ export async function gatherConfig(answers: any, interactive: boolean): Promise<
   // Workspace folder. Assumed to sit in the ROOT that holds the member repos.
   if (answers.workspace === undefined && !interactive) need('workspace');
   cfg.workspace = path.resolve(expandHome(
-    answers.workspace ?? await askText(step('Workspace folder (inside the root with your repos)'))));
+    answers.workspace ?? await askText(step('Workspace folder (inside the root with your repos; created if missing)'))));
 
   // Member repos: explicit list | "scan" | interactive checklist over the scan.
   // Deployment-mandatory repos are locked (cannot be deselected); repos unknown to the
@@ -198,13 +222,20 @@ export async function gatherConfig(answers: any, interactive: boolean): Promise<
       if (!scan.repos.length) fail(`no git repositories found in ${root}`);
       const missing = missingMandatory();
       if (missing.length) fail(`deployment "${cfg.profile!.name}" requires repo folder(s) not found in ${root}: ${missing.join(', ')}`);
-      cfg.repos = cfg.profile
+      // A deployment that CURATES its landscape (a non-empty repo map) filters the scan
+      // to what it knows. A deployment that declares no repos at all curates nothing —
+      // taking every scanned repo is the only reading that leaves the user with a
+      // workspace instead of an empty one (the community starter ships exactly that).
+      const curated = Boolean(cfg.profile) && (mandatory.length > 0 || Object.keys(known).length > 0);
+      cfg.repos = curated
         ? scan.repos.filter((r) => (r.name in known) || mandatory.includes(r.name))
         : scan.repos;
       const unknown = scan.repos.filter((r) => !cfg.repos.includes(r));
       if (unknown.length) warnings.push(`scan excluded ${unknown.length} repo(s) not in the deployment profile: ${unknown.map((r) => r.name).join(', ')} (list explicitly or pick interactively to include)`);
       if (scan.skippedConductors.length)
         warnings.push(`repo scan skipped workspace dir(s): ${scan.skippedConductors.join(', ')}`);
+      for (const c of scan.collisions)
+        warnings.push(`repo name collision — ${c} (connect the skipped one by path: apply --connect-repo <path>)`);
       stepNo += 1;
     } else if (!interactive) {
       need('repos');
@@ -218,8 +249,10 @@ export async function gatherConfig(answers: any, interactive: boolean): Promise<
       if (missing.length) fail(`deployment "${cfg.profile!.name}" requires repo folder(s) not found in ${root}: ${missing.join(', ')}`);
       if (scan.skippedConductors.length)
         process.stdout.write(dim(`  skipped workspace dirs: ${scan.skippedConductors.join(', ')}`) + '\n');
+      for (const c of scan.collisions)
+        process.stdout.write(`${yellow('!')} repo name collision — ${c} (connect the skipped one later: apply --connect-repo <path>)\n`);
       cfg.repos = await tuiSelect(step(`Member repos in ${root}`), scan.repos.map((r) => ({
-        label: r.name,
+        label: path.dirname(r.path) === root ? r.name : `${path.basename(path.dirname(r.path))}/${r.name}`,
         value: r,
         locked: mandatory.includes(r.name),
         checked: !cfg.profile || (r.name in known) || mandatory.includes(r.name),
@@ -463,6 +496,9 @@ export async function cfgFromWorkspace(ws: string): Promise<Cfg> {
         ...(real?.repos?.known ?? {}),
         ...Object.fromEntries((manifest.repos ?? []).map((r: any) => [r.name, {
           role: r.role, ...(r.guards ? { guards: r.guards } : {}),
+          // Declared stack only (the resolved `stacks` outcome is recomputed each
+          // compile — detection must not become sticky through a rebuild).
+          ...(r.stack !== undefined ? { stack: r.stack } : {}),
         }])),
       },
     },

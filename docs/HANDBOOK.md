@@ -25,7 +25,7 @@ node taut.mjs setup --answers a.json --yes   # non-interactive
 ```
 
 Questions, in order: data pack (resolution chain below) → deployment config (when the
-pack ships any) → workspace folder → member repos (auto-scanned from the workspace's
+pack ships any) → workspace folder (created if it does not exist yet) → member repos (auto-scanned from the workspace's
 parent; at least one must be selected, and deployment-mandatory repos are locked) →
 harness(es) — interactively one adapter or all of them; an arbitrary subset comes from
 an answers file or a later `apply` → Atlas integration (opt-in; enabling
@@ -37,8 +37,24 @@ see [PACK.md](PACK.md) §6.3) → skills → MCP servers.
 
 Pack resolution, first hit wins: `--data` / answers `data` → the workspace's own
 `.taut/local.json` binding → `TAUT_DATA` env → `<workspace-parent>/taut-data` (the
-sibling convention) → `~/taut-data` → the engine repo itself (pre-split layout) →
-the bundled `taut-data/` example pack.
+sibling convention) → `~/taut-data` → the engine repo itself (pre-split layout).
+The engine ships no content of its own — when the chain finds nothing, setup fails
+with the fix: `git clone https://github.com/yurgeno/taut-data-community.git
+~/taut-data` (the public starter pack).
+
+A deployment's repo map CURATES the scan: with `repos.known`/`mandatory` entries only
+those repos connect (a landscape where the pack decides membership). A deployment that
+declares NO repos curates nothing — every scanned repo connects, which is what a generic
+starter pack wants.
+
+`repos: "scan"` searches the landscape root (the workspace's parent) **two levels
+deep**: git repositories directly in the root, plus repositories inside a level-1 folder
+that is not itself a repo — a project folder grouping several repos (`travel/{web,api}`)
+is discovered without extra flags. Workspaces are skipped at both levels. Repos are keyed
+by BASENAME: when the same basename appears twice, the first in sorted order wins and the
+other is reported as a collision, to be connected by path if it was the wanted one
+(`apply --connect-repo <path>`). Deeper nesting is never searched — pass those repos as
+explicit paths.
 
 Non-interactive answers file keys: `deployment` (`<name>` or `"none"`), `workspace`,
 `repos` (path list or `"scan"`), `harnesses` (any subset of the supported set,
@@ -64,11 +80,23 @@ CLAUDE.md / AGENTS.md      generated instructions per enabled harness
 .taut/local.json           machine binding: repo paths, engine/pack/Atlas roots (never shared)
 .taut/local.env            per-developer secrets (0600; placeholders written, values never)
 .taut/LAWS.md|docs|runbooks|repos/   shipped documents, all integrity-locked
+repos/<name>/descriptor.md workspace-owned INSTANCE descriptor per connected repo the
+                           pack does not cover: scaffolded at compile, filled in place
+                           by the pack's init skill, read by every session; instance
+                           data — never locked, never swept, never overwritten
 manifest.json              the workspace's own values index (locked artifact)
 taut.lock                  the trust root: pins + per-file sha256 + mode + harness set
 ui                         launcher: `node ui` = panel, `node ui <cmd>` = scoped CLI
 memory/ -> ../<ws>-memory  SYMLINK to instance data (tickets, telemetry) — never compiled
 ```
+
+**Repo descriptors, two homes, one index** (manifest `repoDocs`): a repo the data pack
+covers gets the pack's files installed under `.taut/repos/` — distributed, reviewed,
+integrity-locked. Every other connected repo gets a workspace-owned instance descriptor
+under `repos/` — a living file with no external source of truth, deliberately NOT locked
+(locking it would turn every legitimate edit into "drift"). One repo is always under
+exactly one regime. Member repositories themselves are NEVER written; instruction files
+inside them carry no authority in workspace sessions (L9).
 
 ## 4. The gate
 
@@ -101,7 +129,7 @@ trust root, and the gate would rather refuse than guess.
 | `status` | nothing (read-only) | "how far behind am I?" — pins vs HEADs, drift, MCP pins; exit 0 = ACTUAL |
 | `check` | nothing but a telemetry line per live gate probe | "can work run HERE, NOW?" — integrity, live gate probes per harness, repos reachable, data files readable, memory writable, the Atlas binding when enabled, real MCP handshakes |
 | `verify` | nothing (read-only) | "are the installed files still the ones I compiled?" — re-hashes every artifact against the lock; `--source` additionally re-derives the COPIED ones from the pinned commits (generated artifacts stay lock-checked) |
-| `update` | re-pins engine + pack (recompile) | deliberate actualization; `--data-only` re-pins the pack alone (refuses when the core moved); an "all" skill selection auto-installs newly shipped skills |
+| `update` | re-pins engine + pack (recompile) | deliberate actualization; `--data-only` re-pins the pack alone (refuses when the core moved); an "all" skill selection auto-installs newly shipped skills. Skips the recompile only when BOTH pins are at HEAD, no artifact drifted, **and the pack tree is clean** — an uncommitted or non-git pack always recompiles, so freshly written pack content (repo descriptors, a dropped-in skill) installs instead of being reported "already current" |
 | `repair` | restores drifted/deleted files (recompile from the workspace's own manifest) | healing after tampering or accidents; renders with the current engine tree |
 | `apply` | toggles: `--enable/--disable-skill`, `--enable/--disable-mcp`, `--connect/--disconnect-repo`, `--enable/--disable-harness`, `--mode strict|normal`, `--telemetry basic|extended` | one deliberate recompile per batch; the panel's checklists ride this |
 | `report` | nothing (read-only) | LOCAL aggregation of the workspace's telemetry files: sessions, actualization lag, usage by artifact, denials by cause, lifecycle chronology; `--since`/`--to`/`--json`. Prints only on this machine — sharing the output is a manual act |

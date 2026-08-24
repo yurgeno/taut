@@ -7,7 +7,7 @@ import path from 'node:path';
 
 import { CLI, FW, ensureFrameworkHistory, exists, run, runGate, suite } from './helpers.mjs';
 
-const { TMP, reset, makePack, makeRepo, setup, commitAll } = suite('actualize');
+const { TMP, PACK, reset, makePack, makeRepo, setup, commitAll } = suite('actualize');
 
 let repoB;
 before(async () => {
@@ -32,6 +32,23 @@ const fakeOldPin = async (ws) => {
   lock.framework.commit = stdout.trim();
   await fs.writeFile(lockPath, JSON.stringify(lock, null, 2) + '\n');
 };
+
+test('update does NOT claim "already current" when the pack has uncommitted content', async () => {
+  // The pilot's inner loop writes new files into the pack (repo descriptors, a dropped-in
+  // skill) BEFORE they are committed. Judging the data axis by its commit alone made
+  // update report "already current" and install nothing.
+  const { ws } = await setup('update-dirty-pack', {
+    harness: 'claude-code', atlas: false, skills: 'all', mcp: [], repos: [repoB],
+  });
+  const first = await run(process.execPath, [CLI, 'update', '--workspace', ws]);
+  assert.match(first.stdout, /already current/, 'a clean, unmoved pack still short-circuits');
+
+  await fs.writeFile(path.join(PACK, 'docs', 'EXTRA.md'), '# extra pack doc\n');
+  const second = await run(process.execPath, [CLI, 'update', '--workspace', ws]);
+  assert.ok(!/already current/.test(second.stdout), 'a dirty pack must recompile, not claim current');
+  assert.ok(await exists(path.join(ws, '.taut', 'docs', 'EXTRA.md')), 'the new pack file installs');
+  await fs.rm(path.join(PACK, 'docs', 'EXTRA.md')); // back to a clean tree for the next test
+});
 
 test('status: a fresh workspace is ACTUAL (json contract, exit 0)', async () => {
   const { ws } = await setup('st-fresh', {
@@ -90,7 +107,7 @@ test('update: an "all" selection follows the shipped payload — installs added,
   assert.ok(!await exists(path.join(ws, '.claude', 'skills', 'fx-knowledge')), 'dropped skill files swept');
   const lock1 = JSON.parse(await fs.readFile(path.join(ws, 'taut.lock'), 'utf8'));
   assert.ok(!lock1.artifacts.some((a) => a.id.includes('fx-knowledge')));
-  assert.equal((await readManifest(ws)).skills.length, 9);
+  assert.equal((await readManifest(ws)).skills.length, 10);
 
   // And growing again (a new version shipping new skills installs them for "all").
   const m2 = await readManifest(ws);

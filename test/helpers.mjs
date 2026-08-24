@@ -6,7 +6,7 @@
 // GENERIC fixture pack (test/fixtures/pack: the fx-* shared layer + the full-surface
 // fxdep project) into its sandbox as a git repo and exports it via TAUT_DATA, so every
 // spawned CLI and every in-process call resolves it. The user-facing example pack
-// (taut-data/ = the react-demo project) is exercised by its own end-to-end test. The
+// (fixtures/react-pack = the tutorial's react-demo project) is exercised by its own end-to-end test. The
 // core must stay fully self-testable without any private data pack present.
 import { execFile } from 'node:child_process';
 import { promisify } from 'node:util';

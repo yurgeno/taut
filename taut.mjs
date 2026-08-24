@@ -51,6 +51,7 @@ function parseArgs(argv) {
     else if (a === '--source') opts.source = true;
     else if (a === '--from-deployment') opts.fromDeployment = true;
     else if (a === '--data-only') opts.dataOnly = true;
+    else if (a === '--pack') opts.pack = true;
     else if (a === '--port') opts.port = Number(argv[++i]);
     else if (a === '--enable-skill') opts.skillsOn.push(argv[++i]);
     else if (a === '--disable-skill') opts.skillsOff.push(argv[++i]);
@@ -85,7 +86,7 @@ Usage:
                   [--connect-repo <name|path>]... [--disconnect-repo <name>]...
                   [--enable-harness <h>]... [--disable-harness <h>]...
                   [--mode strict|normal] [--chat-language <code>] [--telemetry basic|extended]
-  taut.mjs repo-scaffold [<repo>...] [--workspace <dir>] [--data <dir>]
+  taut.mjs repo-scaffold [<repo>...] [--pack] [--workspace <dir>] [--data <dir>]
   taut.mjs report [--workspace <dir>] [--since YYYY-MM-DD] [--to YYYY-MM-DD] [--json]
   taut.mjs panel  [--workspace <dir>] [--port <n>]
 
@@ -95,7 +96,8 @@ The pack's home is the WORKSPACE SIBLING: a landscape root reads {repos…, <ws>
 <ws>-memory, taut-data} — one pack serves every workspace of that landscape. Resolution,
 first hit wins: --data / answers "data" > the workspace's own .taut/local.json binding >
 TAUT_DATA env > <workspace-parent>/taut-data (sibling) > ~/taut-data (global fallback) >
-this repo (pre-split layout) > taut-data/ (the bundled example pack). The chosen pack is
+this repo (pre-split layout). The engine ships no content — the community starter pack:
+git clone https://github.com/yurgeno/taut-data-community.git ~/taut-data. The chosen pack is
 recorded in local.json and PINNED in taut.lock next to the framework pin — status/update
 judge BOTH axes.
 
@@ -115,6 +117,13 @@ setup   Compile a workspace from the FLAT ARTIFACT MODEL (no flow entity). The c
           - the REPO MAP — deployment repos{mandatory,known} + per-artifact repos:
             bindings, LINTED at compile (unknown repo = error; unconnected repo =
             artifact excluded with a warning, never silently dead)
+        STACK SPECIALIZATION: the compiler resolves each connected repo's toolchains
+        (deployment repos.known[].stack declaration, otherwise deterministic file
+        probes: package.json -> node, pom.xml/build.gradle* -> jvm, composer.json ->
+        php, + python/go/rust) and keeps exactly the matching "stack-<x>" marker
+        branches in every gated artifact - base skills compile specialized for the
+        repos of THIS workspace. Open vocabulary: an unmatched stack branch compiles
+        out, never an error. Resolved set recorded in manifest rows + lock "stacks".
         DEPLOYMENT CONFIG (per project): a PROJECT FOLDER at the pack root —
         <name>/deployment.json (+ optional skills/, runbooks/) — structural
         keys name/description/repos{mandatory,known}; everything under its "manifest"
@@ -223,17 +232,15 @@ apply   Deliberate per-artifact TOGGLES on an existing workspace, ONE recompile 
         overridden here. The flat value "auto" is the adaptive variant: the generated
         instructions tell the session to MIRROR the language the developer writes in
         (pasted data never switches it) — nothing to configure, nothing to override.
-repo-scaffold  AUTO-INIT of missing repo descriptors (the pack is checked first —
-        initialization happens only for what does not exist). Repo descriptors are
-        per-repo working knowledge shipped from the pack's <project>/repos/<repo>/*.md
-        into the workspace as .taut/repos/<repo>/ (the member repo itself stays
-        untouched; workspace descriptors take precedence over repo-internal instruction
-        files — L9). setup/update flag connected repos the pack does not cover; this
-        command writes a SKELETON descriptor with an embedded distillation brief INTO
-        THE DATA PACK for each uncovered connected repo (or only the repos named as
-        arguments). An agent then fills the skeleton by READ-ONLY analysis per the
-        brief, the owner commits the pack, and update/repair installs the result.
-        Existing files are never overwritten; a filled pack makes this a no-op.
+repo-scaffold  Ensure every connected repo has a descriptor SKELETON. Default target is
+        the WORKSPACE: repos/<name>/descriptor.md — instance files sessions read and the
+        pack's init skill fills in place (setup/update already ensure these; this command
+        re-runs that step on demand). Member repos are never touched, and instruction
+        files inside them carry no authority (L9). With --pack, writes the skeleton into
+        the DATA PACK's <project>/repos/<repo>/ instead — the authoring mode for
+        deployments that ship reviewed, integrity-locked descriptors (requires the repo
+        in the deployment map; owner commits the pack, update installs). Existing
+        non-empty files are never overwritten in either mode.
 panel   The ACTING local panel (D3): loopback-only web UI over the same core — status
         badges (pin vs HEAD, drift, canonicality), Repair/Update buttons, HARNESS +
         skill + MCP +
@@ -279,7 +286,7 @@ past ticket folders read-only as prior art.
 
 Docs: README.md (overview + quickstart) · docs/TUTORIAL.md (build your first pack) ·
 docs/HANDBOOK.md (using compiled workspaces) · docs/PACK.md (authoring reference) ·
-taut-data/ (the example pack: the react-demo tutorial project).
+the community starter pack (github.com/yurgeno/taut-data-community).
 `;
 
 const opts = parseArgs(process.argv.slice(2));

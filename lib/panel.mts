@@ -26,7 +26,7 @@ import { atlasRequired, lintRepoBindings, loadCatalog } from './artifacts.mts';
 import { listDeployments, scanRepos } from './config.mts';
 import { statusData } from './commands.mts';
 import { memoryRootFor } from './install.mts';
-import { expandHome, fail, readIfExists } from './util.mts';
+import { exists, expandHome, fail, readIfExists } from './util.mts';
 import type { CliOpts } from './types.mts';
 
 const CLI = path.join(FW_ROOT, 'taut.mjs');
@@ -206,17 +206,24 @@ async function stateFor(ws: string): Promise<any> {
   const repos = await Promise.all([...repoRows.values()]
     .sort((a, b) => a.name.localeCompare(b.name))
     .map(async (r) => {
-      const files = catalog.repoDocs?.get(r.name) ?? [];
+      // Coverage comes from either home: the pack's shipped files, or the workspace-owned
+      // instance descriptor (repos/<name>/descriptor.md) that the compile scaffolds for
+      // repos the pack does not cover.
+      const paths = (catalog.repoDocs?.get(r.name) ?? []).map((f) => f.path);
+      if (!paths.length) {
+        const inst = path.join(ws, 'repos', r.name, 'descriptor.md');
+        if (await exists(inst)) paths.push(inst);
+      }
       let skeleton = false;
-      for (const f of files) {
-        const text = await readIfExists(f.path, 256 * 1024);
+      for (const f of paths) {
+        const text = await readIfExists(f, 256 * 1024);
         if (text?.includes('STATUS: SKELETON')) { skeleton = true; break; }
       }
       return {
         ...r,
         mandatory: mandatorySet.has(r.name),
         role: profile?.repos?.known?.[r.name]?.role ?? null,
-        descriptorFiles: files.length,
+        descriptorFiles: paths.length,
         skeleton,
       };
     }));

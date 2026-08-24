@@ -1,11 +1,11 @@
 # PACK.md — authoring TAUT data packs
 
-A data pack is the CONTENT half of the core/data split: a plain (usually private) git
-repository holding everything the engine distributes. The bundled example
-(`taut-data/`) demonstrates every element kind and is exercised by the test suite —
-copy it and replace the content. Layout contract: `taut-data/README.md`.
-New to packs? Start with **[TUTORIAL.md](TUTORIAL.md)** — it builds the
-`taut-data/react-demo/` project file by file; this document is the reference.
+A data pack is the CONTENT half of the core/data split: a plain (public or private) git
+repository holding everything the engine distributes. The public starter pack
+[taut-data-community](https://github.com/yurgeno/taut-data-community) is a complete,
+generic worked example — fork it and replace the content, or install it as-is.
+New to packs? Start with **[TUTORIAL.md](TUTORIAL.md)** — it builds a full project
+file by file; this document is the reference.
 
 Two standing rules shape everything below:
 
@@ -59,10 +59,22 @@ for a capability it does not have:
 <!-- atlas:end -->
 ```
 
-`# key:on` / `# key:off` / `# key:end` work inside YAML frontmatter. Known keys:
-`atlas` (the Atlas integration answer) and `mcp-docs` (a docs-role MCP server is
-installed). Markers must be alone on their line; no nesting; unknown keys or unclosed
-blocks FAIL the compile. Marker lines never ship.
+`# key:on` / `# key:off` / `# key:end` work inside YAML frontmatter. Known
+CAPABILITY keys: `atlas` (the Atlas integration answer) and `mcp-docs` (a docs-role MCP
+server is installed) — unknown capability keys FAIL the compile.
+
+**Stack keys — `stack-<toolchain>` — are an OPEN vocabulary.** The compiler resolves
+each connected repo's toolchains (the deployment's `repos.known[].stack` declaration,
+otherwise deterministic file probes: `package.json` → node, `pom.xml`/`build.gradle*` →
+jvm, `composer.json` → php, plus python/go/rust) and turns the union into
+`stack-<x>` gates. A branch whose stack no connected repo has simply compiles OUT —
+never a lint failure — so base skills can carry branches for every toolchain the pack
+supports and each workspace receives exactly the branches its repos need. The resolved
+set is recorded in the manifest (per-repo `stacks`) and the lock (`stacks: […]`;
+`verify --source` rebuilds the gates from it).
+
+Markers must be alone on their line; no nesting; unclosed blocks FAIL the compile.
+Marker lines never ship.
 
 ## 4. Documents — `docs/`
 
@@ -99,7 +111,8 @@ project-folder catalog merges over the shared one (project wins per id / env key
 
 A PROJECT FOLDER at the pack root is one project's whole home: its `deployment.json`
 plus optional project-scoped `skills/ agents/ docs/ catalog/ runbooks/ repos/`. Worked
-example: `taut-data/react-demo/` (tutorial-grade, heavily commented); the full surface
+examples: the tutorial's `react-demo` (built file by file in TUTORIAL.md) and the
+community pack's `starter/`; the full surface
 — mandatory repos, guards, stacks, a shared multi-project layer — is exercised by the
 engine's internal test fixture (`test/fixtures/pack/`, project `fxdep`) if you want to
 see every key in use at once.
@@ -112,8 +125,8 @@ see every key in use at once.
 | `description` | shown in the setup picker and recorded in the manifest |
 | `mode` | optional default workspace mode: `"strict"` or `"normal"`; answers `mode` overrides; adopted by existing workspaces on `update --from-deployment` |
 | `repos.mandatory` | repo names locked into every workspace of this deployment — setup refuses to compile without them, the panel's checklist locks them |
-| `repos.known` | the full repo map: `{"<name>": {"role": "…", "guards": […]}}`. `role` and `guards` pass through into the generated manifest's `repos[]` rows for skills to honor |
-| `$comment` | ignored among the STRUCTURAL keys — annotate freely. Not so inside the `manifest` bag: that bag passes through VERBATIM, so anything you put there ships into the workspace manifest (deliberate in `react-demo`, whose `note:` keys document the values for the agents reading them) |
+| `repos.known` | the full repo map: `{"<name>": {"role": "…", "guards": […], "stack": "jvm"}}`. `role` and `guards` pass through into the generated manifest's `repos[]` rows for skills to honor; `stack` (string or array) DECLARES the repo's toolchain(s) and overrides the compile-time detection (§3) |
+| `$comment` | ignored among the STRUCTURAL keys — annotate freely. Not so inside the `manifest` bag: that bag passes through VERBATIM, so anything you put there ships into the workspace manifest (deliberate in the tutorial's `react-demo`, whose `note:` keys document the values for the agents reading them) |
 
 **The repo map is load-bearing.** It is the LINT DOMAIN for every repo binding in the
 pack: `metadata.taut.repos` on skills, `repos:` on runbooks, and `repos/<name>/`
@@ -146,7 +159,7 @@ The engine treats these as opaque values except at the named seams:
 
 - `flow` — tracker/branch/scm values (ticket patterns, label→repo routing, branch
   policy). Purely skill-consumed; deployments without a tracker simply omit
-  `flow.tracker` (see react-demo).
+  `flow.tracker` (as the tutorial's project does).
 - `runtimeTiers` — the cost-ordered runtime ladder (`static` → mocks → dev servers →
   stacks), teaching sessions to pick the LOWEST sufficient tier. SEAM: a rung's
   `runbook` must name a shipped runbook file (lint); a rung whose runbook the repo lint
@@ -185,6 +198,9 @@ verified commands, layout, gotchas) installed as `.taut/repos/<repo>/` for conne
 repos. The member repo itself is never touched. `taut repo-scaffold` writes a skeleton
 with an embedded distillation brief into the pack for connected repos the pack does not
 cover; an agent fills it by read-only analysis, you commit the pack, `update` installs.
+The scaffold moment doubles as the stack SCAN moment: the skeleton records the detected
+toolchain(s) for the distilling agent to verify (the deployment's `stack` declaration
+remains the compile-time authority, §3).
 
 ## 8. Model profiles — `manifest.modelTiers`
 

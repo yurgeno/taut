@@ -19,6 +19,35 @@ before(async () => {
 });
 after(reset);
 
+test('a deployment with an EMPTY repo map takes every scanned repo (no curation to apply)', async () => {
+  // The community starter ships no repos.known: filtering the scan by an empty map used
+  // to connect nothing, leaving the user with a repo-less workspace.
+  const pack3 = path.join(TMP, 'pack-emptymap');
+  await makePack(pack3);
+  // A minimal project alongside the fixture one: no repo map, no repo-bound artifacts —
+  // the shape the community starter ships.
+  await fs.mkdir(path.join(pack3, 'emptydep'), { recursive: true });
+  await fs.writeFile(path.join(pack3, 'emptydep', 'deployment.json'), JSON.stringify({
+    name: 'emptydep', description: 'no curation', repos: { mandatory: [], known: {} },
+  }, null, 2) + '\n');
+  await commitAll(pack3, 'empty repo map project');
+
+  const root = path.join(TMP, 'emptymaproot');
+  for (const n of ['alpha', 'beta']) await fs.mkdir(path.join(root, n, '.git'), { recursive: true });
+  const ws = path.join(root, 'ws');
+  const answersFile = path.join(TMP, 'emptymap.answers.json');
+  await fs.writeFile(answersFile, JSON.stringify({
+    deployment: 'emptydep', harness: 'claude-code', atlas: false, skills: 'all', mcp: [],
+    workspace: ws, repos: 'scan', data: pack3,
+  }));
+  const { stdout } = await run(process.execPath, [CLI, 'setup', '--answers', answersFile, '--yes']);
+
+  const m = JSON.parse(await fs.readFile(path.join(ws, 'manifest.json'), 'utf8'));
+  assert.deepEqual(m.repos.map((r) => r.name), ['alpha', 'beta'], 'both scanned repos connected');
+  assert.ok(!/scan excluded/.test(stdout), 'nothing is excluded when there is no curation');
+  assert.ok(await exists(path.join(ws, 'repos', 'alpha', 'descriptor.md')), 'each gets its workspace descriptor');
+});
+
 test('deployment profile: full manifest, mandatory enforcement, unknown-repo exclusion in scan', async () => {
   const root = path.join(TMP, 'profroot');
   const mandatoryNames = ['repo-core', 'repo-svc'];
@@ -108,8 +137,8 @@ test('deployment profile: full manifest, mandatory enforcement, unknown-repo exc
   assert.match(claudeMd, /repo-core: `\.taut\/repos\/repo-core\/CLAUDE\.md`, `\.taut\/repos\/repo-core\/Style\.md`/);
   // Auto-init flag: connected repos the pack does not cover are named in the summary
   // AND in the instructions (the session offers the owner the scaffold+distill loop).
-  assert.match(stdout, /no descriptors for 2 repo\(s\): repo-opt, repo-svc/);
-  assert.match(claudeMd, /No descriptors yet for: `repo-opt`, `repo-svc`/);
+  assert.match(stdout, /2 still SKELETON: repo-opt, repo-svc/);
+  assert.match(claudeMd, /Still SKELETON \(scaffolded, not yet generated\): `repo-opt`, `repo-svc`/);
   const mockRung = manifest.runtimeTiers.ladder.find((r) => r.tier === 'spa-mock');
   assert.equal(mockRung.how, 'skill fx-spa');
   assert.equal(mockRung.runbook, 'spa-mock', 'the rung names its runbook');
@@ -205,9 +234,10 @@ test('model profile: sessionTier renders into settings/config/instructions/lock;
 });
 
 test('react-demo (the tutorial project) compiles end-to-end: multi-harness, profile, flow, runbook, descriptor', async () => {
-  // Runs against the USER-FACING example pack (taut-data/ in the engine repo), not the
-  // suite fixture — the tutorial cannot rot while this test is green.
-  const reactPack = await makePack(path.join(TMP, 'react-pack'), path.join(FW, 'taut-data'));
+  // Runs against the react-pack fixture (formerly the bundled example pack; the engine
+  // ships no content since the community-pack split) — it covers model profiles,
+  // runbooks, per-repo pack docs and a flow doc, which the fx fixture does not.
+  const reactPack = await makePack(path.join(TMP, 'react-pack'), path.join(FW, 'test', 'fixtures', 'react-pack'));
   const root = path.join(TMP, 'reactland');
   await fs.mkdir(path.join(root, 'react-app', '.git'), { recursive: true });
   const ws = path.join(root, 'ws');
@@ -627,11 +657,11 @@ test('repo-scaffold: auto-init of missing descriptors — skeleton into the pack
     workspace: ws, repos: 'scan', data: pack2,
   }));
   const first = await run(process.execPath, [CLI, 'setup', '--answers', answersFile, '--yes']);
-  assert.match(first.stdout, /no descriptors for 1 repo\(s\): repo-svc/, 'compile flags the uncovered connected repo');
-  assert.match(await fs.readFile(path.join(ws, 'CLAUDE.md'), 'utf8'), /No descriptors yet for: `repo-svc`/);
+  assert.match(first.stdout, /1 still SKELETON: repo-svc/, 'compile flags the not-yet-generated instance descriptor');
+  assert.match(await fs.readFile(path.join(ws, 'CLAUDE.md'), 'utf8'), /Still SKELETON \(scaffolded, not yet generated\): `repo-svc`/);
 
-  // Scaffold writes the skeleton INTO THE PACK (project folder), never the repo.
-  const s1 = await run(process.execPath, [CLI, 'repo-scaffold', '--workspace', ws]);
+  // PACK MODE writes the skeleton INTO THE PACK (project folder), never the repo.
+  const s1 = await run(process.execPath, [CLI, 'repo-scaffold', '--pack', '--workspace', ws]);
   assert.match(s1.stdout, /scaffolded 1 repo descriptor skeleton/);
   const scafPath = path.join(pack2, 'fxdep', 'repos', 'repo-svc', 'CLAUDE.md');
   const scaf = await fs.readFile(scafPath, 'utf8');
@@ -641,23 +671,27 @@ test('repo-scaffold: auto-init of missing descriptors — skeleton into the pack
   assert.match(scaf, /repoPaths/, 'the brief resolves the repo path portably via local.json');
   assert.ok(!await exists(path.join(root, 'repo-svc', 'CLAUDE.md')), 'the member repo itself stays untouched');
   // Idempotent: the fresh skeleton now covers repo-svc; nothing is overwritten.
-  const s2 = await run(process.execPath, [CLI, 'repo-scaffold', '--workspace', ws]);
+  const s2 = await run(process.execPath, [CLI, 'repo-scaffold', '--pack', '--workspace', ws]);
   assert.match(s2.stdout, /nothing to scaffold/);
   assert.equal(await fs.readFile(scafPath, 'utf8'), scaf, 'existing file never overwritten');
-  await assert.rejects(run(process.execPath, [CLI, 'repo-scaffold', 'ghost', '--workspace', ws]), /not connected/);
+  await assert.rejects(run(process.execPath, [CLI, 'repo-scaffold', '--pack', 'ghost', '--workspace', ws]), /not connected/);
 
   // Fill (simulated agent analysis), owner commits the pack, update installs + flag clears.
   await fs.writeFile(scafPath, '# repo-svc — repo descriptor\n\nFilled by analysis.\n');
   await commitAll(pack2, 'repo-svc descriptor');
   const upd = await run(process.execPath, [CLI, 'update', '--workspace', ws]);
-  assert.ok(!/no descriptors for/.test(upd.stdout), 'auto-init flag cleared after the fill');
+  assert.ok(!/still SKELETON/.test(upd.stdout), 'skeleton flag cleared: the pack now covers the repo');
   assert.match(await fs.readFile(path.join(ws, '.taut', 'repos', 'repo-svc', 'CLAUDE.md'), 'utf8'), /Filled by analysis/);
   const m = JSON.parse(await fs.readFile(path.join(ws, 'manifest.json'), 'utf8'));
-  assert.deepEqual(m.repoDocs['repo-svc'], ['.taut/repos/repo-svc/CLAUDE.md']);
+  assert.deepEqual(m.repoDocs['repo-svc'], ['.taut/repos/repo-svc/CLAUDE.md'],
+    'a pack-covered repo is indexed to the locked home even if a leftover instance file exists');
 
-  // Descriptors are project-scoped: a `deployment: none` workspace refuses to scaffold.
+  // PACK MODE is project-scoped: a `deployment: none` workspace refuses it — but the
+  // DEFAULT (workspace instance) mode works everywhere.
   const { ws: wsNone } = await setup('scaf-none', {
     harness: 'claude-code', atlas: false, skills: ['fx-stack'], mcp: [], repos: [repoB],
   });
-  await assert.rejects(run(process.execPath, [CLI, 'repo-scaffold', '--workspace', wsNone]), /project-scoped/);
+  await assert.rejects(run(process.execPath, [CLI, 'repo-scaffold', '--pack', '--workspace', wsNone]), /project-scoped/);
+  const sNone = await run(process.execPath, [CLI, 'repo-scaffold', '--workspace', wsNone]);
+  assert.match(sNone.stdout, /nothing to scaffold|scaffolded/, 'default mode needs no deployment');
 });

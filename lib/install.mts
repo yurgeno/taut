@@ -11,6 +11,7 @@ import { exists, fail, readIfExists, sha256 } from './util.mts';
 import { neededAgents } from './artifacts.mts';
 import { applyMarkers } from './markers.mts';
 import { buildManifest, installedFlowDocs } from './manifest.mts';
+import { resolveRepoStacks } from './stacks.mts';
 import {
   renderClaudeSettings, renderCodexAgentToml, renderCodexConfigToml, renderCodexHooksToml,
   renderInstructions, renderMcpJson, renderMcpServersSpec, renderStackSkill, renderUiShim,
@@ -133,10 +134,14 @@ async function copyGated(list: ArtifactRow[], ws: string, rel: string, sourceAbs
 
 // The gate values a config implies. Kept in ONE place — verify derives the same set from
 // the lock (lib/lock.mts) and both must stay in step with the keys sources use.
+// Stack gates (`stack-<x>`) come from resolveRepoStacks (declared ?? detected over the
+// connected repos); the vocabulary is OPEN — a `stack-*` key absent here reads as OFF
+// in the marker pass instead of failing (lib/markers.mts).
 export function capabilityGates(cfg: Cfg): Record<string, boolean> {
   return {
     atlas: Boolean(cfg.atlas),
     'mcp-docs': cfg.mcp.some((id) => MCP_CATALOG[id].role === 'docs'),
+    ...Object.fromEntries((cfg.stacks ?? []).map((s) => [`stack-${s}`, true])),
   };
 }
 
@@ -152,6 +157,9 @@ export async function install(cfg: Cfg): Promise<ArtifactRow[]> {
   // Memory first: the sibling root + the workspace symlink must exist before anything
   // (the gate may log telemetry from the very first session).
   await ensureMemory(ws);
+  // Stack SCAN before the gates: per-repo toolchains (declared ?? detected) specialize
+  // every marker-gated artifact for the repos this workspace actually connects.
+  await resolveRepoStacks(cfg);
   const gates = capabilityGates(cfg);
 
   // Runbook references: every `stacks.<n>.runbook` / `runtimeTiers.ladder[].runbook`

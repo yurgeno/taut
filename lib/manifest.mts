@@ -156,15 +156,25 @@ export function buildManifest(cfg: Cfg): Record<string, any> {
     })),
     // Repo descriptors index: repo → installed workspace-relative files.
     // Agents look a repo up here BEFORE working in it; only connected repos appear.
-    repoDocs: Object.fromEntries(
-      [...cfg.catalog.repoDocs]
+    // Two homes, one index: pack-covered repos point into .taut/repos/ (installed,
+    // integrity-locked); every other connected repo points at its workspace-owned
+    // instance descriptor under repos/ (living file, edited in place). Agents follow
+    // the index — they never need to know which regime a repo is under.
+    repoDocs: Object.fromEntries([
+      ...[...cfg.catalog.repoDocs]
         .filter(([n]) => cfg.repos.some((r) => r.name === n))
         .map(([n, files]) => [n, files.map((f: { file: string }) => `.taut/repos/${n}/${f.file}`)]),
-    ),
+      ...(cfg.wsRepoDocs ?? []).map((d) => [d.repo, [d.file]]),
+    ]),
     repos: cfg.repos.map((r) => ({
       name: r.name,
       role: known[r.name]?.role ?? 'member',
       ...(known[r.name]?.guards ? { guards: known[r.name].guards } : {}),
+      // `stack` = the deployment's DECLARATION (input, survives repair reconstruction);
+      // `stacks` = the RESOLVED outcome of this compile (declared ?? detected) — the
+      // audit record; detection re-runs every compile, so the outcome never goes stale.
+      ...(known[r.name]?.stack !== undefined ? { stack: known[r.name].stack } : {}),
+      ...(cfg.repoStacks?.[r.name]?.length ? { stacks: cfg.repoStacks[r.name] } : {}),
       ...(mandatorySet.has(r.name) ? { mandatory: true } : {}),
       git: 'read-only',
     })),

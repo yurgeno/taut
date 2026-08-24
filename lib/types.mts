@@ -23,6 +23,7 @@ export interface CliOpts {
   source?: boolean;
   fromDeployment?: boolean;
   dataOnly?: boolean;
+  pack?: boolean;
   port?: number;
   mode?: string;
   chatLanguage?: string;
@@ -36,8 +37,9 @@ export interface CliOpts {
 export interface Repo { name: string; path: string }
 
 // Per-repo values in a deployment's known map (pack-authored; role/guards pass through
-// into the generated manifest).
-export interface KnownRepo { role?: string; guards?: unknown }
+// into the generated manifest). `stack` (string | string[]) DECLARES the repo's
+// toolchain(s) and overrides the compile-time detection (lib/stacks.mts).
+export interface KnownRepo { role?: string; guards?: unknown; stack?: string | string[] }
 
 // A deployment profile = <project>/deployment.json + its resolved pack dir. The
 // `manifest` bag passes VERBATIM into the generated manifest (compiler-owned keys
@@ -112,6 +114,13 @@ export interface Cfg {
   runbooks?: RunbookEntry[];
   lintWarnings?: string[];
   repoExcludedSkills?: Set<string>;
+  // Resolved by resolveRepoStacks (install): per-repo toolchains (declared ?? detected)
+  // and their workspace union — feeds the stack-* marker gates, manifest rows, lock.
+  repoStacks?: Record<string, string[]>;
+  stacks?: string[];
+  // Workspace-owned INSTANCE descriptors (repos/<name>/descriptor.md): computed each
+  // compile for connected repos the pack does not cover. Not lock artifacts.
+  wsRepoDocs?: { repo: string; file: string; skeleton: boolean }[];
 }
 
 // One MCP catalog entry (catalog/mcp.json — pack- or project-authored).
@@ -153,6 +162,9 @@ export interface Lock {
   // Telemetry level — the gate reads it from the lock (the same tamper-anchored root as
   // `mode`). Absent (legacy lock) = extended, the default.
   telemetry?: string;
+  // Resolved workspace stacks at compile — `verify --source` rebuilds the stack-*
+  // marker gates from this (like atlas/mcp-docs). Absent (legacy lock) = none.
+  stacks?: string[];
   artifacts: ArtifactRow[];
   mcp: { id: string; role: string; serverKey: string; package: string; pin: string; runner: string }[];
 }

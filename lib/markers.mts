@@ -11,8 +11,12 @@
 // (duplicate-key variants never reach a YAML parser — sources are only consumed through
 // this pass). Known keys today: `atlas` (Atlas integration), `mcp-docs` (a docs-role MCP
 // server is installed) — the gate values come from the setup config / the lock.
-// Marker lines never ship; no nesting. Malformed or unknown-key markers throw — the
-// compile fails rather than shipping a half-gated artifact (lint).
+// STACK keys (`stack-<toolchain>`, lib/stacks.mts) are an OPEN vocabulary: a key absent
+// from the gates reads as OFF (the branch compiles out) instead of failing — a pack may
+// legitimately carry branches for stacks a given workspace does not have. Capability
+// keys stay strict. Marker lines never ship; no nesting. Malformed or unknown
+// capability-key markers throw — the compile fails rather than shipping a half-gated
+// artifact (lint).
 const MARKER = /^(?:<!-- ([a-z][a-z0-9-]*):(on|off|end) -->|# ([a-z][a-z0-9-]*):(on|off|end))$/;
 
 export function applyMarkers(text: string, gates: Record<string, boolean>, id = 'artifact'): string {
@@ -25,7 +29,7 @@ export function applyMarkers(text: string, gates: Record<string, boolean>, id = 
     if (m) {
       const k = m[1] ?? m[3];
       const verb = m[2] ?? m[4];
-      if (!(k in gates)) throw new Error(`${id}:${i + 1}: unknown capability "${k}" (gates: ${Object.keys(gates).join(', ')})`);
+      if (!(k in gates) && !k.startsWith('stack-')) throw new Error(`${id}:${i + 1}: unknown capability "${k}" (gates: ${Object.keys(gates).join(', ')})`);
       if (verb === 'on') {
         if (key !== null) throw new Error(`${id}:${i + 1}: nested ${k}:on inside ${key} block`);
         key = k; branch = 'on';

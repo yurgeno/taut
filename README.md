@@ -111,21 +111,26 @@ edited around the pipeline.
 Requires Node ≥ 24 (for the compiler only) on Linux or macOS — the only supported and
 tested platforms.
 
+The engine ships no content — skills, agents, laws and docs come from a **data pack**.
+The public starter pack is
+[taut-data-community](https://github.com/yurgeno/taut-data-community): a generic
+three-stage development flow (analyze → implement → review, owner-gated), a
+workspace-init skill that studies your repositories and generates their descriptors,
+and a workspace-check readiness probe — for ANY landscape, nothing project-specific.
+
 ```bash
 git clone https://github.com/yurgeno/taut.git
+git clone https://github.com/yurgeno/taut-data-community.git ~/taut-data
 cd taut
 node taut.mjs setup
 ```
 
-The interactive setup resolves the bundled example pack (`taut-data/` — the
-`react-demo` tutorial project). Two things to know before you answer: **member repos are
-scanned from the workspace folder's PARENT**, and at least one must be selected — so put
-the workspace next to your repos. The example's one mapped repo is fictional, so stub it:
-
-```bash
-mkdir -p ~/react-land && git init -q ~/react-land/react-app
-# then answer the workspace question with: ~/react-land/ws
-```
+Setup finds the pack at `~/taut-data` automatically (resolution chain: `--data` flag →
+the workspace's own binding → `TAUT_DATA` env → `<workspace-parent>/taut-data` sibling
+→ `~/taut-data`). Two things to know before you answer: **member repos are scanned from
+the workspace folder's PARENT** (two levels deep), and at least one must be selected —
+so give a workspace path inside the folder that holds your repos; the folder is created
+if it does not exist.
 
 Setup then asks (in order): data pack, deployment, workspace folder, member repos,
 harness(es), Atlas (say `disable` unless you know what it is), mode, skills, MCP servers
@@ -138,9 +143,11 @@ node ui status   # actualization check: pins vs HEADs, integrity, MCP pins
 node ui check    # readiness self-test: integrity, live gate probe, repos, MCP handshakes
 ```
 
-To run on your own content, author a data pack (start from `taut-data/`, see
-[docs/PACK.md](docs/PACK.md)) and keep it as `taut-data` next to your workspace — or
-pass `--data <path>`.
+After the first compile, open the workspace with your harness and run the
+`workspace-init` skill — it fills each repo's descriptor with verified working
+knowledge. To author your own pack instead of the community one, see
+[docs/TUTORIAL.md](docs/TUTORIAL.md) and [docs/PACK.md](docs/PACK.md); keep the pack as
+`taut-data` next to your workspace or pass `--data <path>`.
 
 Working on TAUT itself additionally needs the dev dependencies (a typechecker — the
 compiler ships none at runtime):
@@ -153,10 +160,10 @@ npm install && npm test
 
 | Where | What |
 |---|---|
-| [docs/TUTORIAL.md](docs/TUTORIAL.md) | **start here to run TAUT on your own project** — builds a complete pack file by file (the `taut-data/react-demo/` project: a three-stage flow for a React SPA, agents, model profiles, a runbook, per-repo knowledge, context7) |
+| [docs/TUTORIAL.md](docs/TUTORIAL.md) | **authoring your own pack** — builds a complete pack file by file (a three-stage flow for a React SPA, agents, model profiles, a runbook, per-repo knowledge, context7); to just RUN TAUT, install [taut-data-community](https://github.com/yurgeno/taut-data-community) instead |
 | [docs/HANDBOOK.md](docs/HANDBOOK.md) | using TAUT: setup, workspace anatomy, the lock and the gate, update vs repair vs apply, the panel, strict mode, multi-harness, model profiles, memory |
 | [docs/PACK.md](docs/PACK.md) | authoring data packs: every element kind, frontmatter wiring, capability markers, deployment configs, model ladders, runbooks, repo descriptors |
-| [taut-data/README.md](taut-data/README.md) | the example pack (the `react-demo` tutorial project) — also the out-of-the-box fallback; an end-to-end test compiles it on every `npm test` |
+| [taut-data-community](https://github.com/yurgeno/taut-data-community) | the public starter DATA PACK — generic dev flow + workspace-init/-check skills; its own README and manual cover installation and adaptation |
 | `node taut.mjs --help` | the full command reference |
 
 ## Repo map
@@ -167,7 +174,6 @@ npm install && npm test
 | `lib/*.mts` | the compiler — TypeScript run natively by Node; `tsc --noEmit` is the checker |
 | `gate/gate.mjs` | the SHIPPED integrity gate (self-contained plain JS — runs on any workspace Node) |
 | `gate/mcp-launch.mjs` | the SHIPPED MCP launcher (reads `.taut/local.env` at server start) |
-| `taut-data/` | the example data pack (the `react-demo` tutorial project) — resolver fallback, compiled by an e2e test |
 | `test/` | `node --test` suites, each in its own sandbox; `npm test` = typecheck + suite |
 
 ## Contributing
