@@ -108,7 +108,7 @@ export async function initDataFor({ explicit = null, ws = null }: { explicit?: s
 // per-harness surface (render targets, hook wiring, gate routing, panel toggles) derives
 // from this list. Supporting a new harness = adding its id here plus its adapter seams —
 // packs and workspaces never change shape.
-export const HARNESSES = ['claude-code', 'codex'];
+export const HARNESSES = ['claude-code', 'codex', 'opencode'];
 
 // Manifest keys the compiler owns — a deployment config's `manifest` bag cannot override
 // them (flow is special: its blocks merge around the computed `flow.stages`). `flows`

@@ -12,8 +12,9 @@ subagents, laws, runbooks, per-repo knowledge, MCP pins, model profiles) into a
 ready-to-work folder for your agent harness — hash-locked, runtime-guarded, and
 deliberately updatable. TAUT is harness-agnostic: sources are authored once,
 harness-neutral, and compiled per harness through adapters — currently
-[Claude Code](https://code.claude.com) and
-[Codex](https://developers.openai.com/codex), with the set designed to grow.
+[Claude Code](https://code.claude.com),
+[Codex](https://developers.openai.com/codex) and [opencode](https://opencode.ai),
+with the set designed to grow.
 
 Zero runtime dependencies. The compiler is TypeScript executed natively by Node ≥ 24
 (type stripping — no build step); compiled workspaces themselves run on any Node.
@@ -75,13 +76,16 @@ edited around the pipeline.
   sources; one workspace can carry several toolchains side by side, each through its
   harness's native mechanisms — the per-harness trees are disjoint by construction
   (today: `.claude/*` + `CLAUDE.md` + `.mcp.json` for Claude Code, `.agents/skills`
-  + `.codex/*` + `AGENTS.md` for Codex). Enable any subset; switch from the panel
+  + `.codex/*` + `AGENTS.md` for Codex, `.opencode/*` + `opencode.json` for opencode —
+  which reads the same Agent Skills tree and AGENTS.md natively). Enable any subset;
+  switch from the panel
   without a re-setup; secrets, selections and memory survive every toggle.
 - **Model profiles.** The pack declares a model ladder (per-harness model, effort,
   context variant, use-when) plus the tier the orchestrator session runs on. The
   compiler enforces it through each harness's own config surface
   (`.claude/settings.json` `model`/`effortLevel` — workspace settings beat user
-  defaults; `.codex/config.toml` `model`/`model_reasoning_effort`), renders a Model
+  defaults; `.codex/config.toml` `model`/`model_reasoning_effort`; `opencode.json`
+  `model`), renders a Model
   policy section into the instructions, and the gate advises when a live session
   deviates from the pin.
 - **Strict mode.** Optionally, only the compiled toolchain runs: foreign skills,

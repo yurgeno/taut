@@ -59,6 +59,60 @@ export function renderCodexConfigToml(cfg: Cfg): string {
   return lines.join('\n');
 }
 
+export function renderOpencodeJson(cfg: Cfg): string {
+  // Project-level opencode config (opencode.json; merged over the user's global config,
+  // project keys win): the model-profile SESSION pin, MCP servers through the SAME
+  // launcher as every other harness (.taut/local.env is read at server start), and — in
+  // STRICT mode — a NATIVE skill-permission allowlist compiled from the managed set, so
+  // opencode denies foreign skills itself IN ADDITION to the gate (defense in depth; the
+  // only adapter with a native permission surface today — the gate stays authoritative
+  // either way). The gate plugin is not named here: opencode auto-loads .opencode/plugins/.
+  const rung = sessionRung(cfg);
+  const model = rung?.models?.opencode;
+  const mcp: Record<string, unknown> = {};
+  for (const id of cfg.mcp) {
+    const c = MCP_CATALOG[id];
+    const e = launcherEntry(cfg, id);
+    mcp[c.serverKey] = { type: 'local', command: [e.command, ...e.args], enabled: true };
+  }
+  // Managed skill names = installed skills + the generated per-profile stack wrappers
+  // (same runbook-lint filter as install/instructions — a wrapper that is not written
+  // must not be allow-listed).
+  const hasStackEngine = cfg.skills.some((s) => cfg.catalog.skills.get(s)?.meta.role === 'stack-engine');
+  const managed = [
+    ...cfg.skills,
+    ...(hasStackEngine ? Object.entries(cfg.profile?.manifest?.stacks ?? {})
+      .filter(([, st]: [string, any]) => typeof st.runbook !== 'string' || (cfg.runbooks ?? []).some((r) => r.name === st.runbook))
+      .map(([n]) => `up-${n}`) : []),
+  ];
+  return JSON.stringify({
+    $schema: 'https://opencode.ai/config.json',
+    ...(model ? { model } : {}),
+    ...(cfg.mcp.length ? { mcp } : {}),
+    ...(cfg.mode === 'strict'
+      ? { permission: { skill: { '*': 'deny', ...Object.fromEntries(managed.map((s) => [s, 'allow'])) } } }
+      : {}),
+  }, null, 2) + '\n';
+}
+
+export function renderOpencodeAgentMd(name: string, sourceMd: string, cfg: Cfg): string {
+  // opencode subagent (.opencode/agents/<name>.md): markdown + YAML frontmatter, so the
+  // capability-gated source BODY passes through byte-exact; only the frontmatter is
+  // rebuilt (description, mode: subagent, and the model pin mapped across harnesses via
+  // the deployment config's modelTiers ladder — the same seam as Codex; unmapped pins
+  // inherit the session model). Recorded degradation: CC frontmatter tool allowlists are
+  // informational here.
+  const body = sourceMd.replace(/^---\n[\s\S]*?\n---\n/, '');
+  const pin = (sourceMd.match(/^model:\s*(\S+)/m) ?? [])[1];
+  const rung = cfg.profile?.manifest?.modelTiers?.ladder?.find((r: any) => r.models?.['claude-code'] === pin);
+  const model = rung?.models?.opencode;
+  return '---\n' +
+    `description: TAUT ${name} subagent (compiled from framework source; methodology below)\n` +
+    'mode: subagent\n' +
+    (model ? `model: ${model}\n` : '') +
+    '---\n\n' + body;
+}
+
 export function renderClaudeSettings(cfg: Cfg): string {
   // Gate hooks. PreToolUse(Skill|Agent|Task) = precise per-artifact deny;
   // UserPromptExpansion covers direct /skillname invocations (they bypass PreToolUse);
@@ -200,7 +254,14 @@ the chosen one.
 `;
 }
 
-export function renderInstructions(cfg: Cfg, { forCodex }: { forCodex: boolean }): string {
+export function renderInstructions(cfg: Cfg, { readers }: { readers: string[] }): string {
+  // `readers` = the enabled harnesses that read THIS instruction file. CLAUDE.md has one
+  // reader (claude-code); AGENTS.md is a SHARED convention — codex and opencode both read
+  // it, so a workspace enabling both gets ONE file rendered for the pair (codex phrasing
+  // leads where they diverge; the opencode note below carries its specifics — opencode
+  // additionally loads them via opencode.json `instructions` semantics natively).
+  const forCodex = readers.includes('codex');
+  const forOpencode = readers.includes('opencode');
   const m = buildManifest(cfg);
   const chain = stageChain(cfg.catalog);
   // Law summary = the CORE law document's declared bullets (docs/LAWS.md frontmatter) +
@@ -212,7 +273,7 @@ export function renderInstructions(cfg: Cfg, { forCodex }: { forCodex: boolean }
     .map((s, i) => `| ${i} | \`${s}\` | ${forCodex ? `\`$${s}\`` : `skill \`${s}\``} |`)
     .join('\n');
   const extraSkills = cfg.skills.filter((s) => !chain.includes(s));
-  const skillHome = forCodex ? '.agents/skills/<name>/SKILL.md' : '.claude/skills/<name>/SKILL.md';
+  const skillHome = forCodex || forOpencode ? '.agents/skills/<name>/SKILL.md' : '.claude/skills/<name>/SKILL.md';
   // Content roles, not content names: the stack engine and the
   // cheapest-runnable tier are whichever installed skills declare the roles.
   const roleSkill = (role: string): string | null => cfg.skills.find((s) => cfg.catalog.skills.get(s)?.meta.role === role) ?? null;
@@ -260,14 +321,14 @@ ${typeof langs.documents === 'string' ? `- Written artifacts (specs, plans, revi
   drafts are written in it (delivered in chat only).\n` : ''}` : '';
   const mt = cfg.profile?.manifest?.modelTiers;
   const sRung = sessionRung(cfg);
-  const hKey = forCodex ? 'codex' : 'claude-code';
+  const hKey = forCodex ? 'codex' : forOpencode ? 'opencode' : 'claude-code';
   const rungModel = (r: any) => r.models?.[hKey] ?? r.model;
   const modelPolicy = sRung ? `
 ## Model policy (harness: ${hKey})
 
 The SESSION (orchestration, flow stages, everything not delegated) runs on tier
 \`${mt.sessionTier}\` — model \`${rungModel(sRung) ?? 'inherit'}\`${rungEffort(sRung, hKey) ? `, effort ${rungEffort(sRung, hKey)}` : ''} — ENFORCED by
-${forCodex ? '`.codex/config.toml` (`model` / `model_reasoning_effort`)' : '`.claude/settings.json` (`model` / `effortLevel`; workspace settings override user defaults)'}.
+${forCodex ? '`.codex/config.toml` (`model` / `model_reasoning_effort`)' : forOpencode ? '`opencode.json` (`model`; project config overrides the user global)' : '`.claude/settings.json` (`model` / `effortLevel`; workspace settings override user defaults)'}.
 Do not run orchestration on a wider or costlier model than this pin; quick ops
 (check/status/catalog reads) never escalate. Moving to another tier is a DELIBERATE act
 for the one task that needs it — switch back after. Delegated subagents are pinned per
@@ -355,7 +416,14 @@ description-matching trigger them); subagents are native roles in \`.codex/agent
 TRUST this project on first open so \`.codex/config.toml\` (MCP) and project artifacts
 load. Model pins are mapped across harnesses via the deployment config's modelTiers
 ladder (unmapped pins inherit the session model). Recorded degradation: Claude-Code
-frontmatter tool allowlists are informational here.` : ''}
+frontmatter tool allowlists are informational here.` : ''}${forOpencode ? `
+opencode: skills load natively from \`.agents/skills/\` (the \`skill\` tool runs them;
+description-matching offers them); subagents are native agents in \`.opencode/agents/*.md\`
+(@-mention or the task tool). MCP servers and the session model pin live in
+\`opencode.json\`; the TAUT integrity gate runs as the \`.opencode/plugins/taut-gate.js\`
+plugin. Recorded degradations (capability mapping, surfaced not hidden): there is no
+prompt-time integrity sweep — drifted core artifacts are caught at the first managed
+tool call instead of the first prompt — and the session-start banner is best-effort.` : ''}
 
 ## Memory (instance data · the deployment's own knowledge base)
 

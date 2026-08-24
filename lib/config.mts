@@ -289,6 +289,7 @@ export async function gatherConfig(answers: any, interactive: boolean): Promise<
     const hints: Record<string, string> = {
       'claude-code': 'native skills + subagents, .mcp.json',
       codex: '.agents/skills + .codex native targets',
+      opencode: '.agents/skills + .opencode native targets, opencode.json',
     };
     cfg.harnesses = await tuiSelect(step('Agent harness'), [
       ...HARNESSES.map((h) => ({ label: h, value: [h], hint: hints[h] ?? 'native toolchain' })),

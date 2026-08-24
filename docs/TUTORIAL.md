@@ -292,7 +292,8 @@ ONLY on this machine under `memory/telemetry/`, one file per day, is never sent
 anywhere, and collects no personal data — see HANDBOOK §9.)
 
 What you get: the toolchain of every enabled harness side by side, each invoked its own
-native way (`/analyze` in Claude Code, `$analyze` in Codex), the
+native way (`/analyze` in Claude Code, `$analyze` in Codex, the `skill` tool in
+opencode), the
 session model pinned per the profile, `.taut/LAWS.md` + `FLOW-react.md` + the runbook +
 the react-app descriptor shipped and locked, context7 wired through the launcher, and
 `memory/` linked outside the workspace. Open the panel:

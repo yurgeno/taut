@@ -106,14 +106,14 @@ export async function compileWorkspace(cfg: Cfg, { verb = 'compiled', extra = nu
   // config would keep servers alive unmanaged). Only ids from the old lock are touched —
   // files the framework never wrote are not ours to delete.
   const newIds = new Set(artifacts.map((a) => a.id));
-  const PAYLOAD = /^(\.claude\/skills|\.claude\/agents|\.agents\/skills|\.codex\/agents|\.taut\/docs|\.taut\/runbooks|\.taut\/repos)\//;
+  const PAYLOAD = /^(\.claude\/skills|\.claude\/agents|\.agents\/skills|\.codex\/agents|\.opencode\/agents|\.opencode\/plugins|\.taut\/docs|\.taut\/runbooks|\.taut\/repos)\//;
   // Legacy pre-rename layout: every framework-owned id lived under .federation/ — swept
   // wholesale on migration (instance files local.json/local.env never carry lock ids,
   // and they were moved to .taut/ above before this point).
   const LEGACY = /^\.federation\//;
   // Per-harness ROOT files join the sweep so disabling a harness removes its whole
   // toolchain (instructions, hook wiring, MCP config), not just the payload trees.
-  const HARNESS_ROOT = new Set(['CLAUDE.md', 'AGENTS.md', '.claude/settings.json', '.codex/config.toml']);
+  const HARNESS_ROOT = new Set(['CLAUDE.md', 'AGENTS.md', '.claude/settings.json', '.codex/config.toml', 'opencode.json']);
   const sweepable = (id: string) => PAYLOAD.test(id) || LEGACY.test(id) || HARNESS_ROOT.has(id)
     || id === '.mcp.json' || id === 'ui' || id === '.taut/mcp-servers.json' || id === '.taut/mcp-launch.mjs';
   const removed: string[] = [];
@@ -135,7 +135,7 @@ export async function compileWorkspace(cfg: Cfg, { verb = 'compiled', extra = nu
   // A disabled harness must not leave empty tree skeletons behind (children before
   // parents; rmdir no-ops on non-empty dirs, so anything user-owned keeps its dir).
   if (removed.length)
-    for (const d of ['.agents/skills', '.agents', '.codex/agents', '.codex', '.claude/skills', '.claude/agents', '.claude'])
+    for (const d of ['.agents/skills', '.agents', '.codex/agents', '.codex', '.opencode/agents', '.opencode/plugins', '.opencode', '.claude/skills', '.claude/agents', '.claude'])
       await fs.rmdir(path.join(cfg.workspace, d)).catch(() => {});
   if (migrated) // rmdir only succeeds on now-empty legacy dirs — anything user-owned stays
     for (const d of ['.federation/docs', '.federation/runbooks', '.federation'])
@@ -205,7 +205,9 @@ export async function compileWorkspace(cfg: Cfg, { verb = 'compiled', extra = nu
   for (const h of cfg.harnesses)
     p(`  ${dim('gate')}      ${green('ACTIVE')} ${dim(h === 'codex'
       ? '· codex: PreToolUse + prompt sweep + session banner (.codex/config.toml hooks)'
-      : '· claude-code: PreToolUse(Skill|Agent) + /skill expansion + prompt sweep + session banner')}`);
+      : h === 'opencode'
+        ? '· opencode: tool.execute.before plugin + best-effort session banner (no prompt sweep — first tool call catches drift)'
+        : '· claude-code: PreToolUse(Skill|Agent) + /skill expansion + prompt sweep + session banner')}`);
   for (const w of [...(cfg.warnings ?? []), ...(cfg.lintWarnings ?? [])]) p(`  ${yellow('warning:')} ${w}`);
   if (memberFiles.length) {
     const repoCount = new Set(memberFiles.map((c) => c.repo)).size;
@@ -220,6 +222,7 @@ export async function compileWorkspace(cfg: Cfg, { verb = 'compiled', extra = nu
     p(`     the file itself — after filling, just (re)start the harness or reconnect MCP.`);
     if (cfg.harnesses.includes('claude-code')) p(`  ${++stepNo}. On first open, approve the workspace .mcp.json servers.`);
     if (cfg.harnesses.includes('codex')) p(`  ${++stepNo}. TRUST the project on first Codex open (loads .codex/config.toml MCP + project artifacts).`);
+    if (cfg.harnesses.includes('opencode')) p(`  ${++stepNo}. opencode: (re)start it in this folder — opencode.json (MCP + model) and the .opencode/plugins gate load automatically.`);
   }
   // Onboarding step: named only when the pack ships a skill claiming the `init` ROLE and
   // this workspace still has repos without descriptors — content roles, not content names

@@ -41,9 +41,11 @@ selected at setup; agents ride along only when a selected skill names them.
 ## 2. Agents — `agents/<name>.md`
 
 Subagent sources with standard frontmatter. `model:` pins matter twice: Claude Code
-reads them natively, and the compiler maps them into Codex TOML through the deployment's
+reads them natively, and the compiler maps them into Codex TOML / opencode agent
+markdown through the deployment's
 model ladder (the rung whose `models["claude-code"]` equals the pin supplies
-`models.codex` + `reasoningEffort.codex`). `effort:` pins pass through for Claude Code.
+`models.codex` + `reasoningEffort.codex`; same seam for `models.opencode`,
+`provider/model` format). `effort:` pins pass through for Claude Code.
 Recorded degradation: Claude Code frontmatter tool allowlists are informational on
 Codex — put the methodology in the body.
 

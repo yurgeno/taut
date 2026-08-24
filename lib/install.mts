@@ -14,7 +14,8 @@ import { buildManifest, installedFlowDocs } from './manifest.mts';
 import { resolveRepoStacks } from './stacks.mts';
 import {
   renderClaudeSettings, renderCodexAgentToml, renderCodexConfigToml, renderCodexHooksToml,
-  renderInstructions, renderMcpJson, renderMcpServersSpec, renderStackSkill, renderUiShim,
+  renderInstructions, renderMcpJson, renderMcpServersSpec, renderOpencodeAgentMd,
+  renderOpencodeJson, renderStackSkill, renderUiShim,
 } from './render.mts';
 import type { ArtifactRow, Cfg, MemberFile } from './types.mts';
 
@@ -194,36 +195,64 @@ export async function install(cfg: Cfg): Promise<ArtifactRow[]> {
       wrapperStacks.push([sname, stack]);
     }
 
-  // Per-harness NATIVE sets — every enabled harness gets its own full toolchain; the
-  // trees are disjoint by construction, so the union is conflict-free. Codex targets are
-  // its NATIVE mechanisms: skills → .agents/skills (Agent Skills standard), subagents →
-  // .codex/agents/*.toml, MCP + gate hooks → project .codex/config.toml (trust-gated).
+  // Per-harness NATIVE sets — every enabled harness gets its own full toolchain. Codex
+  // targets its NATIVE mechanisms: skills → .agents/skills (Agent Skills standard),
+  // subagents → .codex/agents/*.toml, MCP + gate hooks → project .codex/config.toml
+  // (trust-gated). opencode reads the same Agent Skills standard NATIVELY, so it SHARES
+  // the .agents/skills tree with codex (one copy, one lock row — the `seen` guard below);
+  // its own targets are .opencode/agents/*.md, opencode.json (MCP + model + strict
+  // permission), and the gate as an auto-loaded .opencode/plugins/ plugin. The trees are
+  // otherwise disjoint by construction, so the union is conflict-free.
+  const seen = new Set<string>();
   for (const h of targets) {
     const forCodex = h === 'codex';
-    const skillsBase = forCodex ? '.agents/skills' : '.claude/skills';
+    const forOpencode = h === 'opencode';
+    const skillsBase = forCodex || forOpencode ? '.agents/skills' : '.claude/skills';
     for (const s of cfg.skills) {
       const src = catalog.skills.get(s) ?? fail(`skill "${s}" not found in the framework/deployment catalog`);
-      await copyGated(artifacts, ws, `${skillsBase}/${s}/SKILL.md`, src.path, gates);
+      const id = `${skillsBase}/${s}/SKILL.md`;
+      if (seen.has(id)) continue; // shared tree, identical content — already installed
+      seen.add(id);
+      await copyGated(artifacts, ws, id, src.path, gates);
     }
-    for (const [sname, stack] of wrapperStacks)
-      await writeArtifact(artifacts, ws, `${skillsBase}/up-${sname}/SKILL.md`, renderStackSkill(sname, stack, cfg, stackEngine!));
+    for (const [sname, stack] of wrapperStacks) {
+      const id = `${skillsBase}/up-${sname}/SKILL.md`;
+      if (seen.has(id)) continue;
+      seen.add(id);
+      await writeArtifact(artifacts, ws, id, renderStackSkill(sname, stack, cfg, stackEngine!));
+    }
     for (const a of agents) {
       const src = catalog.agents.get(a) ?? fail(`agent "${a}" is named by an installed skill but not shipped by the framework`);
-      if (forCodex) {
-        // Codex agents are RENDERED (TOML), so the capability gate applies to the source
-        // body before rendering; the artifact stays lock-checked like every generated file.
+      if (forCodex || forOpencode) {
+        // Codex/opencode agents are RENDERED (TOML / frontmatter-rebuilt markdown), so the
+        // capability gate applies to the source body before rendering; the artifact stays
+        // lock-checked like every generated file.
         let md: string;
         try { md = applyMarkers(await fs.readFile(src.path, 'utf8'), gates, path.relative(FW_ROOT, src.path)); }
         catch (e) { fail(`capability-marker lint: ${(e as Error).message}`); }
-        await writeArtifact(artifacts, ws, `.codex/agents/${a}.toml`, renderCodexAgentToml(a, md, cfg));
+        if (forCodex) await writeArtifact(artifacts, ws, `.codex/agents/${a}.toml`, renderCodexAgentToml(a, md, cfg));
+        else await writeArtifact(artifacts, ws, `.opencode/agents/${a}.md`, renderOpencodeAgentMd(a, md, cfg));
       } else await copyGated(artifacts, ws, `.claude/agents/${a}.md`, src.path, gates);
     }
-    await writeArtifact(artifacts, ws, forCodex ? 'AGENTS.md' : 'CLAUDE.md', renderInstructions(cfg, { forCodex }));
-    if (!forCodex && cfg.mcp.length) await writeArtifact(artifacts, ws, '.mcp.json', renderMcpJson(cfg));
+    if (h === 'claude-code') {
+      if (cfg.mcp.length) await writeArtifact(artifacts, ws, '.mcp.json', renderMcpJson(cfg));
+      await writeArtifact(artifacts, ws, '.claude/settings.json', renderClaudeSettings(cfg));
+    }
     if (forCodex) await writeArtifact(artifacts, ws, '.codex/config.toml',
       renderCodexConfigToml(cfg) + renderCodexHooksToml());
-    if (!forCodex) await writeArtifact(artifacts, ws, '.claude/settings.json', renderClaudeSettings(cfg));
+    if (forOpencode) {
+      await writeArtifact(artifacts, ws, 'opencode.json', renderOpencodeJson(cfg));
+      await copyArtifact(artifacts, ws, '.opencode/plugins/taut-gate.js', path.join(FW_ROOT, 'gate', 'opencode-plugin.mjs'));
+    }
   }
+  // Instruction files LAST, by reader set: CLAUDE.md has one reader; AGENTS.md is a
+  // SHARED convention (codex + opencode both read it) — rendered ONCE for whichever of
+  // the pair is enabled, so a dual workspace gets one coherent file, not a last-writer-wins.
+  if (targets.includes('claude-code'))
+    await writeArtifact(artifacts, ws, 'CLAUDE.md', renderInstructions(cfg, { readers: ['claude-code'] }));
+  const agentsMdReaders = targets.filter((h) => h === 'codex' || h === 'opencode');
+  if (agentsMdReaders.length)
+    await writeArtifact(artifacts, ws, 'AGENTS.md', renderInstructions(cfg, { readers: agentsMdReaders }));
 
   await writeArtifact(artifacts, ws, 'manifest.json', JSON.stringify(buildManifest(cfg), null, 2) + '\n');
   // The `node ui` launcher — executable so `./ui` works too; non-payload id ⇒ CORE for

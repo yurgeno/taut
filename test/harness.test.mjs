@@ -133,7 +133,7 @@ test('panel: state exposes the harness set; /api/apply maps the harness payload'
     const base = `http://127.0.0.1:${p.port}`;
     const st = await (await fetch(`${base}/api/state`)).json();
     assert.deepEqual(st.harnesses, ['claude-code', 'codex']);
-    assert.deepEqual(st.harnessesAvailable, ['claude-code', 'codex']);
+    assert.deepEqual(st.harnessesAvailable, ['claude-code', 'codex', 'opencode']);
     assert.deepEqual(st.status.harnesses, ['claude-code', 'codex']);
 
     const r = await fetch(`${base}/api/apply`, {

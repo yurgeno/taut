@@ -58,7 +58,7 @@ explicit paths.
 
 Non-interactive answers file keys: `deployment` (`<name>` or `"none"`), `workspace`,
 `repos` (path list or `"scan"`), `harnesses` (any subset of the supported set,
-today `["claude-code","codex"]`), `atlas` (the Atlas engine folder to enable the
+today `["claude-code","codex","opencode"]`), `atlas` (the Atlas engine folder to enable the
 integration; omitted/false = disabled — a bare `true` fails), `mode`, `chatLanguage`
 (the session-language code; accepted only when the deployment declares a choice —
 omitted, the declared default applies), `skills`
@@ -71,9 +71,13 @@ CLAUDE.md / AGENTS.md      generated instructions per enabled harness
 .claude/skills|agents/     Claude Code payload (skills verbatim+gated, agents .md)
 .claude/settings.json      gate hooks + the model profile's session pin
 .mcp.json                  Claude Code MCP config (via the workspace launcher)
-.agents/skills/            Codex payload (Agent Skills standard)
+.agents/skills/            Codex + opencode payload (Agent Skills standard — SHARED:
+                           both harnesses read it natively, one copy, one lock row)
 .codex/agents/*.toml       Codex subagents (rendered from the same sources)
 .codex/config.toml         Codex MCP + gate hooks + the session model pin
+.opencode/agents/*.md      opencode subagents (rendered from the same sources)
+.opencode/plugins/taut-gate.js  the gate as an opencode plugin (auto-loaded; CORE)
+opencode.json              opencode MCP + session model pin (+ strict skill allowlist)
 .taut/gate.mjs             the integrity gate (shipped, self-contained)
 .taut/mcp-launch.mjs       the MCP launcher (reads .taut/local.env itself)
 .taut/mcp-servers.json     the allowed MCP servers the launcher and gate read
@@ -100,7 +104,9 @@ inside them carry no authority in workspace sessions (L9).
 
 ## 4. The gate
 
-Wired per harness (`.claude/settings.json` hooks; `.codex/config.toml` hooks), each
+Wired per harness (`.claude/settings.json` hooks; `.codex/config.toml` hooks;
+`.opencode/plugins/taut-gate.js` — a thin plugin translating opencode's
+`tool.execute.before` onto the same gate, deny = thrown error), each
 wiring carrying its identity (`--harness …`). Behavior:
 
 - **PreToolUse** — a managed skill/agent whose file drifted from the lock is DENIED with
@@ -115,6 +121,19 @@ wiring carrying its identity (`--harness …`). Behavior:
   "engine/pack moved N commits" advisory, and the model-policy advisory (live model vs
   the profile pin). Advisories never block.
 - A gate invoked with the identity of a DISABLED harness (stale wiring) fails closed.
+- **opencode capability mapping (recorded degradations, surfaced not hidden):** no
+  blocking prompt hook exists, so there is NO prompt-time sweep — drifted core
+  artifacts are caught at the first managed tool call instead of the first prompt (the
+  invoke chokepoint is otherwise CLEANER: skills always run through the native `skill`
+  tool, no /slash bypass). The session-start banner is best-effort (toast; headless
+  `opencode run` delivers no session events to plugins at all — verified live). MCP
+  tools are not `mcp__`-prefixed there: they are advertised as `<serverKey>_<tool>`
+  (verified live against opencode 1.18.20), so lock-listed servers are recognized by
+  serverKey prefix; a FOREIGN server's tools are not name-detectable, so strict-foreign MCP is
+  enforced by the locked `opencode.json` (adding a server = editing it = core drift =
+  deny) rather than by name. In strict mode the compiler ALSO renders a native
+  `permission.skill` allowlist into `opencode.json` — the only adapter with a native
+  permission surface today; defense in depth, the gate stays authoritative.
 - Every managed invocation is recorded through the telemetry adapter (see §9) —
   LOCAL-ONLY daily files under `memory/telemetry/`; a missing adapter is a silent
   no-op, telemetry never breaks the gate.

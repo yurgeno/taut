@@ -112,16 +112,21 @@ try {
   }
   const HARNESS = HARNESS_ARG ?? (enabled.length === 1 ? enabled[0] : 'claude-code');
   const forCodex = HARNESS === 'codex';
+  const forOpencode = HARNESS === 'opencode';
 
   const byId = new Map(lock.artifacts.map((a) => [a.id, a.sha256]));
-  const isPayload = (id) => /^(\.claude\/skills|\.claude\/agents|\.agents\/skills|\.codex\/agents)\//.test(id);
+  // .opencode/plugins is NOT payload — the gate plugin is enforcement infrastructure,
+  // core-checked like the gate itself and the hook wiring.
+  const isPayload = (id) => /^(\.claude\/skills|\.claude\/agents|\.agents\/skills|\.codex\/agents|\.opencode\/agents)\//.test(id);
   const coreIds = lock.artifacts.filter((a) => !isPayload(a.id)).map((a) => a.id);
   const checkIds = (ids) => ids
     .map((id) => ({ id, st: artifactState(id, byId.get(id)) }))
     .filter((r) => r.st !== 'ok')
     .map((r) => `${r.id} (${r.st})`);
-  const skillArtifact = (name) => (forCodex ? `.agents/skills/${name}/SKILL.md` : `.claude/skills/${name}/SKILL.md`);
-  const agentArtifact = (name) => (forCodex ? `.codex/agents/${name}.toml` : `.claude/agents/${name}.md`);
+  // opencode reads the Agent Skills standard natively — it SHARES the .agents/skills
+  // tree with codex (one installed copy, one lock row); its subagents are its own tree.
+  const skillArtifact = (name) => (forCodex || forOpencode ? `.agents/skills/${name}/SKILL.md` : `.claude/skills/${name}/SKILL.md`);
+  const agentArtifact = (name) => (forCodex ? `.codex/agents/${name}.toml` : forOpencode ? `.opencode/agents/${name}.md` : `.claude/agents/${name}.md`);
   // STRICT mode: only the compiled toolchain runs. The mode rides in the
   // lock (the tamper-anchored root); a legacy lock without it = normal. Governs
   // ARTIFACTS only — harness built-ins (tools, built-in subagent types) are never gated.
@@ -132,10 +137,18 @@ try {
     const tool = input.tool_name ?? '';
     const ti = input.tool_input ?? {};
     // MCP calls reach the gate only where the matcher sends them (strict claude-code
-    // widens it; Codex hooks are always broad). Foreign server in strict = deny; the
-    // allowed set is the LOCK's serverKeys — the same trust root as everything else.
-    if (tool.startsWith('mcp__')) {
-      const server = tool.split('__')[1] ?? '';
+    // widens it; Codex/opencode hooks are always broad). Foreign server in strict = deny;
+    // the allowed set is the LOCK's serverKeys — the same trust root as everything else.
+    // opencode does not prefix MCP tools with mcp__ — a lock-listed server is recognized
+    // by its serverKey prefix instead. Recorded limitation: a FOREIGN server's tools are
+    // not name-detectable there, so strict-foreign MCP under opencode is enforced by the
+    // locked opencode.json (adding a server means editing it → core drift → deny), not
+    // by this name match.
+    const mcpHit = tool.startsWith('mcp__') ? (tool.split('__')[1] ?? '')
+      : forOpencode ? ((lock.mcp ?? []).find((m) => tool === m.serverKey || tool.startsWith(m.serverKey + '_'))?.serverKey ?? null)
+        : null;
+    if (mcpHit !== null) {
+      const server = mcpHit;
       const allowed = (lock.mcp ?? []).some((m) => m.serverKey === server);
       if (strict && !allowed) {
         logUsage({ ts, event: 'invoke', kind: 'mcp', name: server, decision: 'deny', cause: 'strict-foreign', harness: HARNESS, session_id: sid });
@@ -144,14 +157,17 @@ try {
       logUsage({ ts, event: 'invoke', kind: 'mcp', name: server, decision: 'allow', managed: allowed, harness: HARNESS, session_id: sid });
       process.exit(0);
     }
+    // Tool names are harness-native: claude-code capitalizes (Skill/Agent/Task),
+    // opencode's natives are lowercase (skill / task); the arg key carrying the name
+    // varies the same way — accept both shapes, unknown keys just resolve to no name.
     let kind = null; let name = null; let id = null;
-    if (tool === 'Skill') {
+    if (tool === 'Skill' || tool === 'skill') {
       kind = 'skill';
       name = String(ti.skill ?? ti.name ?? ti.command ?? '').split(/\s+/)[0].replace(/^\//, '');
       id = skillArtifact(name);
-    } else if (tool === 'Agent' || tool === 'Task') {
+    } else if (tool === 'Agent' || tool === 'Task' || tool === 'task' || tool === 'agent') {
       kind = 'agent';
-      name = String(ti.subagent_type ?? '');
+      name = String(ti.subagent_type ?? ti.subagentType ?? ti.agent ?? '');
       id = agentArtifact(name);
     }
     if (!id || !byId.has(id)) {
@@ -201,7 +217,7 @@ try {
     // plugin skills invoked by direct slash are covered at the Skill-tool chokepoint
     // instead (recorded limitation; built-in /commands are never skill dirs, so never hit).
     if (strict) {
-      const skillsDir = path.join(WS, forCodex ? '.agents/skills' : '.claude/skills');
+      const skillsDir = path.join(WS, forCodex || forOpencode ? '.agents/skills' : '.claude/skills');
       let local = [];
       try { local = fs.readdirSync(skillsDir); } catch { local = []; }
       const foreign = local.filter((n) => !byId.has(skillArtifact(n)) && mentions(text, n));
