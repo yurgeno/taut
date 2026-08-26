@@ -1,0 +1,37 @@
+cff-version: 1.2.0
+message: >-
+  If you use TAUT, or build on the concepts it implements —
+  workspace-as-a-build-artifact distribution of AI-agent toolchains
+  under a lock file and a fail-closed integrity gate — please cite it
+  as below.
+title: "TAUT — Toolchain Actualization Under Trust"
+type: software
+authors:
+  - given-names: Yuriy
+    family-names: Orlov
+    email: yuriy.orlov@undertrust.dev
+abstract: >-
+  TAUT is a distribution engine for AI-agent toolchains. It compiles a
+  harness-neutral data pack (skills, subagents, guidelines, an MCP
+  catalog) into per-harness agent workspaces (Claude Code, Codex,
+  opencode), pins the engine and pack versions plus a sha256 checksum
+  for every installed artifact in a lock file, and enforces integrity
+  at runtime with a fail-closed gate. Nobody edits the workspace: the
+  pack is the single reviewed source, and the workspace is a build
+  artifact.
+keywords:
+  - ai-agents
+  - agentic-coding
+  - llm-toolchain
+  - workspace-as-build-artifact
+  - toolchain-distribution
+  - integrity-gate
+  - lockfile
+  - supply-chain
+  - claude-code
+  - codex
+  - opencode
+repository-code: "https://github.com/yurgeno/taut"
+license: Apache-2.0
+version: 0.5.0
+date-released: "2026-08-26"
