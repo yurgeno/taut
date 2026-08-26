@@ -28,9 +28,10 @@ Questions, in order: data pack (resolution chain below) → deployment config (w
 pack ships any) → workspace folder (created if it does not exist yet) → member repos (auto-scanned from the workspace's
 parent; at least one must be selected, and deployment-mandatory repos are locked) →
 harness(es) — interactively one adapter or all of them; an arbitrary subset comes from
-an answers file or a later `apply` → Atlas integration (opt-in; enabling
-asks for the Atlas engine folder next — an empty or wrong folder aborts setup; if you
-have never heard of Atlas, keep the preselected `disable`) → workspace mode
+an answers file or a later `apply` → KAUT integration — formerly Atlas; legacy `atlas`
+keys/markers still accepted (opt-in; enabling
+asks for the KAUT engine folder next — an empty or wrong folder aborts setup; if you
+have never heard of KAUT, keep the preselected `disable`) → workspace mode
 (`normal`/`strict`) → session language (ONLY when the deployment config declares a
 choice via `defaults.languages.chat = {options[], default}` — a flat value never asks;
 see [PACK.md](PACK.md) §6.3) → skills → MCP servers.
@@ -58,8 +59,9 @@ explicit paths.
 
 Non-interactive answers file keys: `deployment` (`<name>` or `"none"`), `workspace`,
 `repos` (path list or `"scan"`), `harnesses` (any subset of the supported set,
-today `["claude-code","codex","opencode"]`), `atlas` (the Atlas engine folder to enable the
-integration; omitted/false = disabled — a bare `true` fails), `mode`, `chatLanguage`
+today `["claude-code","codex","opencode"]`), `kaut` (the KAUT engine folder to enable the
+integration — the legacy `atlas` key is still accepted; omitted/false = disabled — a
+bare `true` fails), `mode`, `chatLanguage`
 (the session-language code; accepted only when the deployment declares a choice —
 omitted, the declared default applies), `skills`
 (list or `"all"`), `mcp` (list or `"all"`), `data`.
@@ -81,7 +83,7 @@ opencode.json              opencode MCP + session model pin (+ strict skill allo
 .taut/gate.mjs             the integrity gate (shipped, self-contained)
 .taut/mcp-launch.mjs       the MCP launcher (reads .taut/local.env itself)
 .taut/mcp-servers.json     the allowed MCP servers the launcher and gate read
-.taut/local.json           machine binding: repo paths, engine/pack/Atlas roots (never shared)
+.taut/local.json           machine binding: repo paths, engine/pack/KAUT roots (never shared)
 .taut/local.env            per-developer secrets (0600; placeholders written, values never)
 .taut/LAWS.md|docs|runbooks|repos/   shipped documents, all integrity-locked
 repos/<name>/descriptor.md workspace-owned INSTANCE descriptor per connected repo the
@@ -146,7 +148,7 @@ trust root, and the gate would rather refuse than guess.
 | Verb | What it changes | When |
 |---|---|---|
 | `status` | nothing (read-only) | "how far behind am I?" — pins vs HEADs, drift, MCP pins; exit 0 = ACTUAL |
-| `check` | nothing but a telemetry line per live gate probe | "can work run HERE, NOW?" — integrity, live gate probes per harness, repos reachable, data files readable, memory writable, the Atlas binding when enabled, real MCP handshakes |
+| `check` | nothing but a telemetry line per live gate probe | "can work run HERE, NOW?" — integrity, live gate probes per harness, repos reachable, data files readable, memory writable, the KAUT binding when enabled, real MCP handshakes |
 | `verify` | nothing (read-only) | "are the installed files still the ones I compiled?" — re-hashes every artifact against the lock; `--source` additionally re-derives the COPIED ones from the pinned commits (generated artifacts stay lock-checked) |
 | `update` | re-pins engine + pack (recompile) | deliberate actualization; `--data-only` re-pins the pack alone (refuses when the core moved); an "all" skill selection auto-installs newly shipped skills. Skips the recompile only when BOTH pins are at HEAD, no artifact drifted, **and the pack tree is clean** — an uncommitted or non-git pack always recompiles, so freshly written pack content (repo descriptors, a dropped-in skill) installs instead of being reported "already current" |
 | `repair` | restores drifted/deleted files (recompile from the workspace's own manifest) | healing after tampering or accidents; renders with the current engine tree |

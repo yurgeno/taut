@@ -10,14 +10,14 @@ import type { ExecFileSyncOptionsWithStringEncoding } from 'node:child_process';
 
 import { FW_ROOT, HARNESSES, MCP_CATALOG, initData, initDataFor, initProject, requireData, resolveDataRoot } from './constants.mts';
 import { bold, dim, exists, expandHome, fail, gitInfo, gitInfoOwn, green, isCommit, readIfExists, red, safeJoin, sha256, yellow } from './util.mts';
-import { atlasRequired, neededAgents } from './artifacts.mts';
+import { kautRequired, neededAgents } from './artifacts.mts';
 import { askText, banner } from './tui.mts';
 import { cfgFromWorkspace, gatherConfig, isConductorDir, listDeployments, normalizeHarnesses, relintRepoBindings } from './config.mts';
 import { TELEMETRY_LEVELS, createTelemetry } from '../gate/telemetry.mjs';
 import { detectStacks } from './stacks.mts';
 import { chatChoice } from './manifest.mts';
 import { install, memoryRootFor, migrateLegacyLayout, scanMemberInstructionFiles } from './install.mts';
-import { verify, writeLock } from './lock.mts';
+import { normalizeLock, verify, writeLock } from './lock.mts';
 import { scaffoldDescriptor } from './render.mts';
 import type { Cfg, CliOpts, Lock, RepoDelta, StatusData } from './types.mts';
 
@@ -101,7 +101,7 @@ export async function compileWorkspace(cfg: Cfg, { verb = 'compiled', extra = nu
   const memberFiles = await scanMemberInstructionFiles(cfg);
 
   // Sweep artifacts WE previously installed that this build no longer produces (a skill
-  // dropped by an update, an atlas-flag change, a renamed payload, a flow doc / runbook
+  // dropped by an update, a kaut-flag change, a renamed payload, a flow doc / runbook
   // that left the set, an .mcp.json whose last server was disabled — a lingering MCP
   // config would keep servers alive unmanaged). Only ids from the old lock are touched —
   // files the framework never wrote are not ours to delete.
@@ -147,7 +147,7 @@ export async function compileWorkspace(cfg: Cfg, { verb = 'compiled', extra = nu
     memoryRoot: memoryRootFor(cfg.workspace),
     frameworkRoot: FW_ROOT,
     dataRoot: requireData(),
-    ...(cfg.atlas && cfg.atlasRoot ? { atlasRoot: cfg.atlasRoot } : {}),
+    ...(cfg.kaut && cfg.kautRoot ? { kautRoot: cfg.kautRoot } : {}),
     repoPaths: Object.fromEntries(cfg.repos.map((r) => [r.name, r.path])),
     memberInstructionFiles: memberFiles,
   }, null, 2) + '\n');
@@ -177,7 +177,7 @@ export async function compileWorkspace(cfg: Cfg, { verb = 'compiled', extra = nu
   p(`${green('✔')} ${bold(`TAUT workspace ${verb}`)} ${dim('·')} ${cfg.workspace}${wsCreated ? dim(' · folder created') : ''}`);
   const fw = `${lock.framework.commit?.slice(0, 7) ?? 'no-git'}${lock.framework.canonical ? '' : ` ${yellow('(NON-CANONICAL: dirty tree)')}`}`;
   const dt = `${lock.data?.pack ? `${lock.data.pack} ` : ''}${lock.data?.commit?.slice(0, 7) ?? 'no-git'}${lock.data?.canonical !== false ? '' : ` ${yellow('(NON-CANONICAL: dirty tree)')}`}`;
-  p(`  ${dim('harness')}   ${cfg.harnesses.join(' + ')}   ${dim('mode')} ${cfg.mode === 'strict' ? bold('STRICT') : 'normal'}   ${dim('atlas')} ${cfg.atlas ? (cfg.atlasRoot ? `enabled · ${cfg.atlasRoot}` : 'enabled') : 'disabled'}   ${dim('deployment')} ${cfg.profile?.name ?? 'generic'}   ${dim('framework')} ${fw}`);
+  p(`  ${dim('harness')}   ${cfg.harnesses.join(' + ')}   ${dim('mode')} ${cfg.mode === 'strict' ? bold('STRICT') : 'normal'}   ${dim('kaut')} ${cfg.kaut ? (cfg.kautRoot ? `enabled · ${cfg.kautRoot}` : 'enabled') : 'disabled'}   ${dim('deployment')} ${cfg.profile?.name ?? 'generic'}   ${dim('framework')} ${fw}`);
   p(`  ${dim('data')}      ${dt} ${dim(`· ${requireData()}`)}`);
   p(`  ${dim('skills')}    ${cfg.skills.length} ${dim(`· ${cfg.skills.join(', ')}`)}`);
   p(`  ${dim('agents')}    ${neededAgents(cfg.skills, cfg.catalog).length}`);
@@ -270,7 +270,7 @@ async function readLock(ws: string): Promise<Lock | null> {
   // on it unchanged, and the migration sweep needs the old artifact ids.
   const raw = await readIfExists(path.join(ws, 'taut.lock'), 8 * 1024 * 1024)
     ?? await readIfExists(path.join(ws, 'federation.lock'), 8 * 1024 * 1024);
-  try { return raw === null ? null : JSON.parse(raw); } catch { return null; }
+  try { return raw === null ? null : normalizeLock(JSON.parse(raw)); } catch { return null; }
 }
 
 // What lies between a workspace's pinned commit and the repo HEAD — for the framework
@@ -338,7 +338,7 @@ export async function statusData(ws: string): Promise<StatusData> {
     workspace: ws,
     deployment: manifest?.deployment ?? null,
     harnesses: lock.harnesses ?? (lock.harness ? [lock.harness] : []),
-    atlas: lock.atlas,
+    kaut: lock.kaut,
     generatedAt: lock.generatedAt,
     framework: { pin: lock.framework?.commit ?? null, head: delta.head, behind: delta.behind, pinKnown: delta.pinKnown, canonical, changedFiles: delta.files },
     data: lock.data ? {
@@ -373,7 +373,7 @@ export async function cmdStatus(opts: CliOpts): Promise<void> {
 
   const p = (s: string) => process.stdout.write(s + '\n');
   p(`${current ? green('✔') : yellow('!')} ${bold('TAUT workspace status')} ${dim('·')} ${ws}`);
-  p(`  ${dim('deployment')} ${st.deployment ?? 'generic'}   ${dim('harness')} ${st.harnesses.join(' + ')}   ${dim('atlas')} ${st.atlas ? 'enabled' : 'disabled'}   ${dim('telemetry')} ${st.telemetry}   ${dim('built')} ${st.generatedAt ?? '?'}${fw.canonical ? '' : `   ${yellow('NON-CANONICAL')}`}`);
+  p(`  ${dim('deployment')} ${st.deployment ?? 'generic'}   ${dim('harness')} ${st.harnesses.join(' + ')}   ${dim('kaut')} ${st.kaut ? 'enabled' : 'disabled'}   ${dim('telemetry')} ${st.telemetry}   ${dim('built')} ${st.generatedAt ?? '?'}${fw.canonical ? '' : `   ${yellow('NON-CANONICAL')}`}`);
   const pinTxt = fw.pin?.slice(0, 7) ?? 'none';
   if (fw.behind === 0) p(`  ${dim('framework')}  pin ${pinTxt} ${green('== HEAD — up to date')}`);
   else if (!fw.pinKnown) p(`  ${dim('framework')}  pin ${pinTxt} ${yellow('not found in the framework clone history')} ${dim('(rebased/amended? re-run setup or update)')}`);
@@ -404,7 +404,7 @@ export async function cmdStatus(opts: CliOpts): Promise<void> {
 // at the CURRENT framework with its own manifest settings preserved, printing what the
 // pin move brings. --from-deployment additionally refreshes the manifest's profile blocks
 // from the CURRENT <name>/deployment.json in the pack (factory-settings refresh — user selections
-// harness/atlas/skills/mcp/repos stay as configured).
+// harness/kaut/skills/mcp/repos stay as configured).
 export async function cmdUpdate(opts: CliOpts): Promise<void> {
   const ws = path.resolve(expandHome(opts.workspace ?? process.cwd()));
   if (!await exists(path.join(ws, 'manifest.json'))) fail(`no manifest.json in ${ws} — not a TAUT workspace`);
@@ -476,8 +476,8 @@ export async function cmdUpdate(opts: CliOpts): Promise<void> {
   // no-longer-shipped ones removed (compileWorkspace sweeps their files). A "custom"
   // selection stays fixed — newly available skills are only advertised.
   const available = [...cfg.catalog.skills.keys()].sort();
-  const atlasReq = atlasRequired(cfg.catalog);
-  const selectable = available.filter((s) => (cfg.atlas || !atlasReq.includes(s))
+  const kautReq = kautRequired(cfg.catalog);
+  const selectable = available.filter((s) => (cfg.kaut || !kautReq.includes(s))
     && !(cfg.repoExcludedSkills?.has(s)));
   if (cfg.skillsSelection === 'all') {
     // "all minus exclusions": toggled-off skills (skillsExcluded) never re-install,
@@ -678,19 +678,19 @@ export async function cmdApply(opts: CliOpts): Promise<void> {
     // An "all" selection keeps meaning ALL: skills whose repo bindings the new connected
     // set satisfies (minus explicit exclusions) re-enter, mirroring update's payload rule.
     if (cfg.skillsSelection === 'all') {
-      const atlasReqNow = atlasRequired(cfg.catalog);
+      const kautReqNow = kautRequired(cfg.catalog);
       const excludedNow = new Set(cfg.skillsExcluded ?? []);
       cfg.skills = [...cfg.catalog.skills.keys()].sort().filter((s) =>
-        (cfg.atlas || !atlasReqNow.includes(s)) && !cfg.repoExcludedSkills!.has(s) && !excludedNow.has(s));
+        (cfg.kaut || !kautReqNow.includes(s)) && !cfg.repoExcludedSkills!.has(s) && !excludedNow.has(s));
     }
   }
 
-  const atlasReq = atlasRequired(cfg.catalog);
+  const kautReq = kautRequired(cfg.catalog);
   const excluded = new Set(cfg.skillsExcluded ?? []);
 
   for (const s of opts.skillsOn) {
     if (!cfg.catalog.skills.has(s)) fail(`unknown skill "${s}"`);
-    if (!cfg.atlas && atlasReq.includes(s)) fail(`skill "${s}" requires Atlas, which is disabled in this workspace`);
+    if (!cfg.kaut && kautReq.includes(s)) fail(`skill "${s}" requires KAUT, which is disabled in this workspace`);
     if (cfg.repoExcludedSkills?.has(s)) fail(`skill "${s}" is excluded by the repo lint (bound to repos not connected here)`);
     if (!cfg.skills.includes(s)) cfg.skills.push(s);
     excluded.delete(s);

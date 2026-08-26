@@ -23,7 +23,7 @@ const skillInput = (name) => ({ tool_name: 'Skill', tool_input: { skill: name } 
 
 test('dual setup: both native sets install side by side; one lock/manifest records the set', async () => {
   const { ws } = await setup('dual', {
-    harnesses: ['claude-code', 'codex'], atlas: false, skills: 'all', mcp: ['jira'], repos: [repoB],
+    harnesses: ['claude-code', 'codex'], kaut: false, skills: 'all', mcp: ['jira'], repos: [repoB],
   });
 
   // claude-code set, with its identity-carrying hook wiring
@@ -54,7 +54,7 @@ test('dual setup: both native sets install side by side; one lock/manifest recor
 
 test('toggle OFF sweeps the harness set (no empty skeletons); toggle ON restores; secrets survive', async () => {
   const { ws } = await setup('toggle', {
-    harnesses: 'claude-code,codex', atlas: false, skills: 'all', mcp: ['jira'], repos: [repoB],
+    harnesses: 'claude-code,codex', kaut: false, skills: 'all', mcp: ['jira'], repos: [repoB],
   });
   const envPath = path.join(ws, '.taut', 'local.env');
   await fs.writeFile(envPath, 'JIRA_API_TOKEN=secret-stays\n');
@@ -78,7 +78,7 @@ test('toggle OFF sweeps the harness set (no empty skeletons); toggle ON restores
 
 test('the last enabled harness cannot be disabled', async () => {
   const { ws } = await setup('last', {
-    harness: 'claude-code', atlas: false, skills: 'all', mcp: [], repos: [repoB],
+    harness: 'claude-code', kaut: false, skills: 'all', mcp: [], repos: [repoB],
   });
   await assert.rejects(
     run(process.execPath, [CLI, 'apply', '--workspace', ws, '--disable-harness', 'claude-code']),
@@ -87,7 +87,7 @@ test('the last enabled harness cannot be disabled', async () => {
 
 test('gate identity: per-harness artifact routing; a disabled identity is fail-closed', async () => {
   const { ws } = await setup('gateid', {
-    harnesses: ['claude-code', 'codex'], atlas: false, skills: 'all', mcp: [], repos: [repoB],
+    harnesses: ['claude-code', 'codex'], kaut: false, skills: 'all', mcp: [], repos: [repoB],
   });
   // Drift ONLY the codex copy: claude identity must still pass, codex identity must deny.
   await fs.appendFile(path.join(ws, '.agents', 'skills', 'fx-plan', 'SKILL.md'), '\ndrift\n');
@@ -106,7 +106,7 @@ test('gate identity: per-harness artifact routing; a disabled identity is fail-c
 
 test('legacy scalar lock (v2): the gate still governs through the fallback read', async () => {
   const { ws } = await setup('legacy', {
-    harness: 'claude-code', atlas: false, skills: 'all', mcp: [], repos: [repoB],
+    harness: 'claude-code', kaut: false, skills: 'all', mcp: [], repos: [repoB],
   });
   const lockPath = path.join(ws, 'taut.lock');
   const lock = JSON.parse(await fs.readFile(lockPath, 'utf8'));
@@ -126,7 +126,7 @@ test('legacy scalar lock (v2): the gate still governs through the fallback read'
 
 test('panel: state exposes the harness set; /api/apply maps the harness payload', async () => {
   const { ws } = await setup('panelh', {
-    harnesses: ['claude-code', 'codex'], atlas: false, skills: 'all', mcp: [], repos: [repoB],
+    harnesses: ['claude-code', 'codex'], kaut: false, skills: 'all', mcp: [], repos: [repoB],
   });
   const p = await startPanel(ws, { port: 0 });
   try {

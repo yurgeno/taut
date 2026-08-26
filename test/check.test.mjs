@@ -27,7 +27,7 @@ test('check: a member repo with no commits yet is reachable, not "git unreadable
   await fs.mkdir(fresh, { recursive: true });
   await run('git', ['-C', fresh, 'init', '-q']);
   const { ws } = await setup('check-unborn', {
-    harness: 'claude-code', atlas: false, skills: 'all', mcp: [], repos: [fresh],
+    harness: 'claude-code', kaut: false, skills: 'all', mcp: [], repos: [fresh],
   });
   const r = await run(process.execPath, [CLI, 'check', '--workspace', ws]);
   assert.match(r.stdout, /repo-fresh@\S+ \(no commits yet\)/);
@@ -35,26 +35,56 @@ test('check: a member repo with no commits yet is reachable, not "git unreadable
   assert.match(r.stdout, /READY/);
 });
 
-test('check: atlas row — engine binding verified when enabled; a vanished engine flips to NOT READY', async () => {
-  const engineDir = path.join(TMP, 'atlas-engine');
+test('check: kaut row — engine binding verified when enabled; a vanished engine flips to NOT READY', async () => {
+  const engineDir = path.join(TMP, 'kaut-engine');
   await fs.mkdir(engineDir, { recursive: true });
-  await fs.writeFile(path.join(engineDir, 'atlas.mjs'), '// engine stub\n');
-  const { ws } = await setup('check-atlas', {
-    harness: 'claude-code', atlas: engineDir, skills: 'all', mcp: [], repos: [repoB],
+  await fs.writeFile(path.join(engineDir, 'kaut.mjs'), '// engine stub\n');
+  const { ws } = await setup('check-kaut', {
+    harness: 'claude-code', kaut: engineDir, skills: 'all', mcp: [], repos: [repoB],
   });
   const r = await run(process.execPath, [CLI, 'check', '--workspace', ws]);
-  assert.match(r.stdout, /engine at .*atlas-engine/);
-  await fs.rm(path.join(engineDir, 'atlas.mjs'));
+  assert.match(r.stdout, /engine at .*kaut-engine/);
+  await fs.rm(path.join(engineDir, 'kaut.mjs'));
   await assert.rejects(
     run(process.execPath, [CLI, 'check', '--workspace', ws]),
-    (e) => e.code === 1 && /NOT READY/.test(e.stdout) && /no atlas\.mjs/.test(e.stdout),
+    (e) => e.code === 1 && /NOT READY/.test(e.stdout) && /no kaut\.mjs/.test(e.stdout),
   );
-  await fs.writeFile(path.join(engineDir, 'atlas.mjs'), '// engine stub\n');
+  await fs.writeFile(path.join(engineDir, 'kaut.mjs'), '// engine stub\n');
+});
+
+test('check/status: a LEGACY lock (`atlas: true`) and local.json (`atlasRoot`) load normalized', async () => {
+  // A pre-rename workspace keeps working until its first recompile migrates the keys:
+  // the lock's `atlas` folds into `kaut` at load, `atlasRoot` is the binding fallback,
+  // and an engine checkout shipping only atlas.mjs still passes the probe.
+  const engineDir = path.join(TMP, 'legacy-engine');
+  await fs.mkdir(engineDir, { recursive: true });
+  await fs.writeFile(path.join(engineDir, 'atlas.mjs'), '// legacy engine stub\n');
+  const { ws } = await setup('check-legacy', {
+    harness: 'claude-code', kaut: engineDir, skills: 'all', mcp: [], repos: [repoB],
+  });
+  // Rewrite lock + local.json to the PRE-RENAME shape (keys only — hashes untouched).
+  const lockPath = path.join(ws, 'taut.lock');
+  const lock = JSON.parse(await fs.readFile(lockPath, 'utf8'));
+  assert.equal(lock.kaut, true);
+  delete lock.kaut;
+  lock.atlas = true;
+  await fs.writeFile(lockPath, JSON.stringify(lock, null, 2) + '\n');
+  const localPath = path.join(ws, '.taut', 'local.json');
+  const local = JSON.parse(await fs.readFile(localPath, 'utf8'));
+  local.atlasRoot = local.kautRoot;
+  delete local.kautRoot;
+  await fs.writeFile(localPath, JSON.stringify(local, null, 2) + '\n');
+
+  const r = await run(process.execPath, [CLI, 'check', '--workspace', ws]);
+  assert.match(r.stdout, /kaut\s+engine at .*legacy-engine/, 'legacy keys normalize into the kaut row');
+  assert.match(r.stdout, /READY/);
+  const st = JSON.parse((await run(process.execPath, [CLI, 'status', '--json', '--workspace', ws])).stdout);
+  assert.equal(st.kaut, true, 'status reads the legacy lock through the same normalization');
 });
 
 test('check: green workspace is READY; unreachable repo and drift flip it to NOT READY', async () => {
   const { ws } = await setup('check-green', {
-    harness: 'claude-code', atlas: false, skills: 'all', mcp: [], repos: [repoB],
+    harness: 'claude-code', kaut: false, skills: 'all', mcp: [], repos: [repoB],
   });
   const r = await run(process.execPath, [CLI, 'check', '--workspace', ws]);
   assert.match(r.stdout, /READY/);
@@ -109,7 +139,7 @@ test('check: strict self-test enforced + a real MCP handshake against a local fa
   const ws = path.join(TMP, 'ws', 'check-mcp');
   const answersFile = path.join(TMP, 'check-mcp.answers.json');
   await fs.writeFile(answersFile, JSON.stringify({
-    deployment: 'none', harness: 'claude-code', atlas: false, mode: 'strict',
+    deployment: 'none', harness: 'claude-code', kaut: false, mode: 'strict',
     skills: ['base'], mcp: ['context7'], workspace: ws, repos: [repoB],
   }));
   const env = { env: { ...process.env, TAUT_DATA: packRoot } };

@@ -10,6 +10,6 @@ metadata:
 
 The fx-reviewer reviews the cross-repo change into _cr.md; the owner picks fixes;
 fx-implementer applies them; gates re-run; fx-qa drafts test scenarios (chat-only).
-<!-- atlas:on -->
+<!-- kaut:on -->
 Then offer the knowledge write-back (fx-knowledge mechanics).
-<!-- atlas:end -->
+<!-- kaut:end -->

@@ -279,12 +279,14 @@ cat > /tmp/react-land/answers.json <<'EOF'
   "harnesses": ["claude-code", "codex"],
   "skills": ["analyze", "implement", "review"],
   "mcp": ["context7"],
-  "atlas": false, "mode": "normal" }
+  "kaut": false, "mode": "normal" }
 EOF
 node taut.mjs setup --data /tmp/my-pack --answers /tmp/react-land/answers.json --yes
 ```
 
-(Interactively: `node taut.mjs setup`, pick `react-demo`, check the same boxes.
+(`"kaut"` toggles the KAUT knowledge-engine integration — formerly Atlas; the legacy
+`"atlas"` answers key is still accepted. Interactively: `node taut.mjs setup`, pick
+`react-demo`, check the same boxes.
 On your own project: point `repos` at your real repo and rename the map entry.
 Setup also asks one ENGINE-owned question — the usage-telemetry level, `extended`
 (default) or `basic`; omitted in `--answers` the default applies. Telemetry is stored

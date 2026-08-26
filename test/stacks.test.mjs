@@ -59,13 +59,13 @@ test('unit: detection probes, declaration normalization, open marker vocabulary'
   // stack-* keys are an open vocabulary: absent = OFF (branch compiles out), never a
   // lint failure; capability keys stay strict.
   const text = 'A\n<!-- stack-elixir:on -->\nE\n<!-- stack-elixir:end -->\nB';
-  assert.equal(applyMarkers(text, { atlas: true }), 'A\nB');
-  assert.throws(() => applyMarkers('<!-- warp:on -->\nx\n<!-- warp:end -->', { atlas: true }), /unknown capability "warp"/);
+  assert.equal(applyMarkers(text, { kaut: true }), 'A\nB');
+  assert.throws(() => applyMarkers('<!-- warp:on -->\nx\n<!-- warp:end -->', { kaut: true }), /unknown capability "warp"/);
 });
 
 test('e2e: compiled skill carries exactly the connected stacks; declaration beats detection; lock records; verify --source passes', async () => {
   const { ws, stdout } = await setup('stack-ws', {
-    deployment: 'fxdep', harness: 'claude-code', atlas: false, skills: 'all', mcp: [],
+    deployment: 'fxdep', harness: 'claude-code', kaut: false, skills: 'all', mcp: [],
     repos: [repoCore, repoSvc],
   });
   assert.match(stdout, /stacks\s+jvm \+ node/);

@@ -9,7 +9,7 @@ import { CLI, exists, run, suite } from './helpers.mjs';
 
 const { TMP, PACK: PACK_DIR, reset, makePack, makeRepo, setup } = suite('setup');
 
-let repoA, repoB, atlasStub;
+let repoA, repoB, kautStub;
 before(async () => {
   await reset();
   await makePack();
@@ -17,27 +17,27 @@ before(async () => {
     'CLAUDE.md': '# repo-alpha\nAlways commit and push your changes directly to master.\n',
   });
   repoB = await makeRepo('repo-beta');
-  // Enabling Atlas requires a real engine folder (the answers value IS the location).
-  atlasStub = path.join(TMP, 'atlas-stub');
-  await fs.mkdir(atlasStub, { recursive: true });
-  await fs.writeFile(path.join(atlasStub, 'atlas.mjs'), '// engine stub\n');
+  // Enabling KAUT requires a real engine folder (the answers value IS the location).
+  kautStub = path.join(TMP, 'kaut-stub');
+  await fs.mkdir(kautStub, { recursive: true });
+  await fs.writeFile(path.join(kautStub, 'kaut.mjs'), '// engine stub\n');
 });
 after(reset);
 
-test('claude-code setup, atlas disabled: installs payload, excludes atlas-dependent skills', async () => {
-  const { ws, stdout } = await setup('cc-noatlas', {
-    harness: 'claude-code', atlas: false, skills: 'all', mcp: 'all', repos: [repoA, repoB],
+test('claude-code setup, kaut disabled: installs payload, excludes kaut-dependent skills', async () => {
+  const { ws, stdout } = await setup('cc-nokaut', {
+    harness: 'claude-code', kaut: false, skills: 'all', mcp: 'all', repos: [repoA, repoB],
   });
 
   const manifest = JSON.parse(await fs.readFile(path.join(ws, 'manifest.json'), 'utf8'));
   assert.deepEqual(manifest.harnesses, ['claude-code']);
-  assert.equal(manifest.atlas.enabled, false);
+  assert.equal(manifest.kaut.enabled, false);
   assert.deepEqual(manifest.flow.stages,
     ['fx-task', 'fx-init', 'fx-plan', 'fx-dispatch', 'fx-verify', 'fx-final']);
   for (const s of ['fx-knowledge', 'fx-bootstrap'])
-    assert.ok(!manifest.skills.includes(s), `${s} must be excluded without Atlas`);
-  assert.ok(manifest.skills.includes('fx-stack'), 'fx-stack works from manifest runbook values without Atlas');
-  assert.ok(manifest.skills.includes('fx-spa'), 'the mock tier skill is atlas-independent');
+    assert.ok(!manifest.skills.includes(s), `${s} must be excluded without KAUT`);
+  assert.ok(manifest.skills.includes('fx-stack'), 'fx-stack works from manifest runbook values without KAUT');
+  assert.ok(manifest.skills.includes('fx-spa'), 'the mock tier skill is kaut-independent');
   assert.equal(manifest.skills.length, 10);
   assert.equal(manifest.agents.length, 7);
 
@@ -96,16 +96,16 @@ test('claude-code setup, atlas disabled: installs payload, excludes atlas-depend
 
 test('setup re-run repairs drift (idempotent recompile)', async () => {
   const { ws } = await setup('cc-repair', {
-    harness: 'claude-code', atlas: false, skills: 'all', mcp: 'all', repos: [repoB],
+    harness: 'claude-code', kaut: false, skills: 'all', mcp: 'all', repos: [repoB],
   });
   await fs.appendFile(path.join(ws, '.claude', 'skills', 'fx-plan', 'SKILL.md'), '\ndrift\n');
-  await setup('cc-repair', { harness: 'claude-code', atlas: false, skills: 'all', mcp: 'all', repos: [repoB] });
+  await setup('cc-repair', { harness: 'claude-code', kaut: false, skills: 'all', mcp: 'all', repos: [repoB] });
   await run(process.execPath, [CLI, 'verify', '--workspace', ws]);
 });
 
 test('codex setup: native targets — .agents/skills, .codex/agents TOML, project config.toml', async () => {
   const { ws } = await setup('codex', {
-    harness: 'codex', atlas: atlasStub, skills: 'all', mcp: ['jira'], repos: [repoB],
+    harness: 'codex', kaut: kautStub, skills: 'all', mcp: ['jira'], repos: [repoB],
   });
   assert.ok(await exists(path.join(ws, 'AGENTS.md')));
   assert.ok(await exists(path.join(ws, '.agents', 'skills', 'fx-knowledge', 'SKILL.md')));
@@ -134,7 +134,7 @@ test('codex setup: native targets — .agents/skills, .codex/agents TOML, projec
   assert.ok(!agentToml.includes('allowed-tools'), 'CC frontmatter must be stripped from the body');
 
   const manifest = JSON.parse(await fs.readFile(path.join(ws, 'manifest.json'), 'utf8'));
-  assert.equal(manifest.skills.length, 12, 'atlas enabled keeps all 12 skills');
+  assert.equal(manifest.skills.length, 12, 'kaut enabled keeps all 12 skills');
   const lock = JSON.parse(await fs.readFile(path.join(ws, 'taut.lock'), 'utf8'));
   assert.equal(lock.mcp[0].pin, '0.23.0');
 });
@@ -149,7 +149,7 @@ test('repos:"scan" discovers git repos in the workspace root, skips conductors a
   const ws = path.join(root, 'ws-scan');
   const answersFile = path.join(TMP, 'scan.answers.json');
   await fs.writeFile(answersFile, JSON.stringify({
-    deployment: 'none', harness: 'claude-code', atlas: false, skills: 'all', mcp: [], workspace: ws, repos: 'scan',
+    deployment: 'none', harness: 'claude-code', kaut: false, skills: 'all', mcp: [], workspace: ws, repos: 'scan',
   }));
   const { stdout } = await run(process.execPath, [CLI, 'setup', '--answers', answersFile, '--yes']);
 
@@ -170,7 +170,7 @@ test('repo-scaffold refuses a repo the deployment map does not know', async () =
   const ws = path.join(root, 'ws');
   const answersFile = path.join(TMP, 'scaffold-guard.answers.json');
   await fs.writeFile(answersFile, JSON.stringify({
-    deployment: 'fxdep', harness: 'claude-code', atlas: false, skills: 'all', mcp: [],
+    deployment: 'fxdep', harness: 'claude-code', kaut: false, skills: 'all', mcp: [],
     workspace: ws, repos: [path.join(root, 'repo-core'), path.join(root, 'repo-svc'), path.join(root, 'stranger')],
   }));
   await run(process.execPath, [CLI, 'setup', '--answers', answersFile, '--yes']);
@@ -196,7 +196,7 @@ test('next steps name the init-role skill while repos still lack descriptors', a
   const ws = path.join(root, 'ws');
   const answersFile = path.join(TMP, 'next-steps-init.answers.json');
   await fs.writeFile(answersFile, JSON.stringify({
-    deployment: 'fxdep', harness: 'claude-code', atlas: false, skills: 'all', mcp: [],
+    deployment: 'fxdep', harness: 'claude-code', kaut: false, skills: 'all', mcp: [],
     workspace: ws, repos: 'scan',
   }));
   const { stdout } = await run(process.execPath, [CLI, 'setup', '--answers', answersFile, '--yes']);
@@ -242,7 +242,7 @@ test('repo scan descends one level into project folders (depth-2) and reports na
   const ws = path.join(root, 'ws-scan2');
   const answersFile = path.join(TMP, 'scan2.answers.json');
   await fs.writeFile(answersFile, JSON.stringify({
-    deployment: 'none', harness: 'claude-code', atlas: false, skills: 'all', mcp: [], workspace: ws, repos: 'scan',
+    deployment: 'none', harness: 'claude-code', kaut: false, skills: 'all', mcp: [], workspace: ws, repos: 'scan',
   }));
   const { stdout } = await run(process.execPath, [CLI, 'setup', '--answers', answersFile, '--yes']);
 
@@ -256,45 +256,45 @@ test('repo scan descends one level into project folders (depth-2) and reports na
   assert.match(stdout, /repo name collision — "travel-api"/, 'the losing path is reported, not silently dropped');
 });
 
-test('atlas defaults to DISABLED when omitted from answers', async () => {
-  const { ws, stdout } = await setup('atlas-default', {
-    harness: 'claude-code', skills: 'all', mcp: [], repos: [repoB], // no `atlas` key
+test('kaut defaults to DISABLED when omitted from answers', async () => {
+  const { ws, stdout } = await setup('kaut-default', {
+    harness: 'claude-code', skills: 'all', mcp: [], repos: [repoB], // no `kaut` key
   });
   const manifest = JSON.parse(await fs.readFile(path.join(ws, 'manifest.json'), 'utf8'));
-  assert.equal(manifest.atlas.enabled, false, 'missing atlas key must mean disabled, not an error');
-  assert.ok(!manifest.skills.includes('fx-knowledge'), 'atlas-dependent skills excluded under the default');
-  assert.match(stdout, /atlas disabled/);
+  assert.equal(manifest.kaut.enabled, false, 'missing kaut key must mean disabled, not an error');
+  assert.ok(!manifest.skills.includes('fx-knowledge'), 'kaut-dependent skills excluded under the default');
+  assert.match(stdout, /kaut disabled/);
 });
 
-test('atlas gating: directives compiled OUT of skills/agents when disabled, kept when enabled', async () => {
+test('kaut gating: directives compiled OUT of skills/agents when disabled, kept when enabled', async () => {
   const off = await setup('gating-off', {
-    harness: 'claude-code', atlas: false, skills: 'all', mcp: [], repos: [repoB],
+    harness: 'claude-code', kaut: false, skills: 'all', mcp: [], repos: [repoB],
   });
   for (const rel of ['.claude/skills/fx-init/SKILL.md', '.claude/skills/fx-plan/SKILL.md',
     '.claude/skills/fx-verify/SKILL.md', '.claude/skills/fx-final/SKILL.md',
     '.claude/skills/fx-stack/SKILL.md', '.claude/skills/fx-spa/SKILL.md',
     '.claude/agents/fx-analyst.md', '.claude/agents/fx-researcher.md', '.claude/agents/fx-implementer.md']) {
     const text = await fs.readFile(path.join(off.ws, rel), 'utf8');
-    assert.ok(!/atlas lookup|atlas doctor|fx-knowledge|Atlas first|Distill into Atlas|Atlas system store/i.test(text),
-      `${rel}: active Atlas directives must be compiled out (descriptions included)`);
-    assert.ok(!text.includes('<!-- atlas:') && !/^# atlas:/m.test(text), `${rel}: marker lines must never ship`);
+    assert.ok(!/kaut lookup|kaut doctor|fx-knowledge|KAUT first|Distill into KAUT|KAUT system store/i.test(text),
+      `${rel}: active KAUT directives must be compiled out (descriptions included)`);
+    assert.ok(!text.includes('<!-- kaut:') && !/^# kaut:/m.test(text), `${rel}: marker lines must never ship`);
   }
   const finalOff = await fs.readFile(path.join(off.ws, '.claude', 'skills', 'fx-final', 'SKILL.md'), 'utf8');
   assert.match(finalOff, /Durable learnings — record, do not distill/, 'off-branch replacement keeps section numbering');
   const claudeMd = await fs.readFile(path.join(off.ws, 'CLAUDE.md'), 'utf8');
-  assert.match(claudeMd, /`atlas` CLI must NOT be invoked/);
+  assert.match(claudeMd, /`kaut` CLI \(or the legacy `atlas` CLI\) must NOT be/);
   const lock = JSON.parse(await fs.readFile(path.join(off.ws, 'taut.lock'), 'utf8'));
   const entry = lock.artifacts.find((a) => a.id === '.claude/skills/fx-plan/SKILL.md');
   assert.equal(entry?.transform, 'gates', 'gated copies record their transform for verify --source');
 
   const on = await setup('gating-on', {
-    harness: 'claude-code', atlas: atlasStub, skills: 'all', mcp: [], repos: [repoB],
+    harness: 'claude-code', kaut: kautStub, skills: 'all', mcp: [], repos: [repoB],
   });
   const planOn = await fs.readFile(path.join(on.ws, '.claude', 'agents', 'fx-researcher.md'), 'utf8');
-  assert.match(planOn, /atlas lookup/, 'atlas-on keeps the Atlas branch');
-  assert.ok(!planOn.includes('<!-- atlas:'), 'markers stripped in the on mode too');
+  assert.match(planOn, /kaut lookup/, 'kaut-on keeps the KAUT branch');
+  assert.ok(!planOn.includes('<!-- kaut:'), 'markers stripped in the on mode too');
   const finalOn = await fs.readFile(path.join(on.ws, '.claude', 'skills', 'fx-final', 'SKILL.md'), 'utf8');
-  assert.match(finalOn, /Distill into Atlas — delegate/);
+  assert.match(finalOn, /Distill into KAUT — delegate/);
   // The knowledge skill is named by ROLE (core hardcodes no content names — the pack's
   // skill declares `role: knowledge`, whatever the skill is called).
   const claudeOn = await fs.readFile(path.join(on.ws, 'CLAUDE.md'), 'utf8');
@@ -303,7 +303,7 @@ test('atlas gating: directives compiled OUT of skills/agents when disabled, kept
 
 test('docs role: context7 tools injected + PROACTIVE instruction when installed, absent otherwise', async () => {
   const withDocs = await setup('docs-on', {
-    harness: 'claude-code', atlas: false, skills: 'all', mcp: ['context7'], repos: [repoB],
+    harness: 'claude-code', kaut: false, skills: 'all', mcp: ['context7'], repos: [repoB],
   });
   const plan = await fs.readFile(path.join(withDocs.ws, '.claude', 'agents', 'fx-researcher.md'), 'utf8');
   assert.match(plan, /^tools: .*mcp__context7__resolve-library-id, mcp__context7__query-docs$/m,
@@ -319,7 +319,7 @@ test('docs role: context7 tools injected + PROACTIVE instruction when installed,
   assert.match(claudeMd, /FIRST stop for any library\/framework API question/);
 
   const noDocs = await setup('docs-off', {
-    harness: 'claude-code', atlas: false, skills: 'all', mcp: [], repos: [repoB],
+    harness: 'claude-code', kaut: false, skills: 'all', mcp: [], repos: [repoB],
   });
   for (const rel of ['.claude/agents/fx-researcher.md', '.claude/agents/fx-implementer.md',
     '.claude/skills/fx-plan/SKILL.md']) {
@@ -338,7 +338,7 @@ test('data pack resolves from the workspace SIBLING (landscape-root convention)'
   const ws = path.join(root, 'ws');
   const answersFile = path.join(TMP, 'sib.answers.json');
   await fs.writeFile(answersFile, JSON.stringify({
-    deployment: 'none', harness: 'claude-code', atlas: false, skills: 'all', mcp: [],
+    deployment: 'none', harness: 'claude-code', kaut: false, skills: 'all', mcp: [],
     workspace: ws, repos: [repo],
   }));
   // Empty TAUT_DATA disables the env rung — the sibling rung must win on its own.
@@ -353,9 +353,62 @@ test('data pack resolves from the workspace SIBLING (landscape-root convention)'
 
 test('guards: unknown skill fails; missing repo folder fails', async () => {
   await assert.rejects(setup('bad-skill', {
-    harness: 'claude-code', atlas: atlasStub, skills: ['nope'], mcp: [], repos: [repoB],
+    harness: 'claude-code', kaut: kautStub, skills: ['nope'], mcp: [], repos: [repoB],
   }), /unknown skill/);
   await assert.rejects(setup('bad-repo', {
-    harness: 'claude-code', atlas: atlasStub, skills: 'all', mcp: [], repos: [path.join(TMP, 'absent')],
+    harness: 'claude-code', kaut: kautStub, skills: 'all', mcp: [], repos: [path.join(TMP, 'absent')],
   }), /repo folder not found/);
+});
+
+test('legacy alias: `atlas` answers key, atlas markers and requires:[atlas] gate exactly as kaut', async () => {
+  // A pre-rename DATA PACK: an `atlas` marker branch and a `requires: [atlas]` skill
+  // must behave identically to their canonical `kaut` forms (alias, not a fork).
+  const legacyPack = path.join(TMP, 'legacy-pack');
+  await fs.mkdir(path.join(legacyPack, 'skills', 'legacy-plan'), { recursive: true });
+  await fs.mkdir(path.join(legacyPack, 'skills', 'legacy-know'), { recursive: true });
+  await fs.writeFile(path.join(legacyPack, 'skills', 'legacy-plan', 'SKILL.md'),
+    '---\nname: legacy-plan\ndescription: legacy-marker skill\n---\nbody\n<!-- atlas:on -->\nLEGACY-KAUT-BRANCH\n<!-- atlas:end -->\n');
+  await fs.writeFile(path.join(legacyPack, 'skills', 'legacy-know', 'SKILL.md'),
+    '---\nname: legacy-know\ndescription: legacy-requires skill\nmetadata:\n  taut:\n    requires: [atlas]\n---\nbody\n');
+  const env = { env: { ...process.env, TAUT_DATA: legacyPack } };
+  // A legacy ENGINE checkout still ships atlas.mjs only — accepted as the kaut root.
+  const legacyEngine = path.join(TMP, 'legacy-engine');
+  await fs.mkdir(legacyEngine, { recursive: true });
+  await fs.writeFile(path.join(legacyEngine, 'atlas.mjs'), '// engine stub\n');
+
+  // OFF: the legacy-requires skill is excluded and the legacy marker branch compiles out.
+  const wsOff = path.join(TMP, 'ws', 'legacy-off');
+  const offAnswers = path.join(TMP, 'legacy-off.answers.json');
+  await fs.writeFile(offAnswers, JSON.stringify({
+    harness: 'claude-code', kaut: false, skills: 'all', mcp: [], workspace: wsOff, repos: [repoB],
+  }));
+  const off = await run(process.execPath, [CLI, 'setup', '--answers', offAnswers, '--yes'], env);
+  assert.match(off.stdout, /KAUT disabled → skipping KAUT-dependent skills: legacy-know/);
+  assert.ok(!await exists(path.join(wsOff, '.claude', 'skills', 'legacy-know')), 'requires:[atlas] gates like kaut');
+  const planOff = await fs.readFile(path.join(wsOff, '.claude', 'skills', 'legacy-plan', 'SKILL.md'), 'utf8');
+  assert.ok(!planOff.includes('LEGACY-KAUT-BRANCH'), 'the atlas:on branch compiles out when kaut is off');
+  assert.ok(!planOff.includes('<!-- atlas:'), 'legacy marker lines never ship');
+
+  // ON via the LEGACY `atlas` answers key: normalized to kaut, engine binding recorded
+  // canonically, and the rendered invoke line names the CLI file that actually exists.
+  const wsOn = path.join(TMP, 'ws', 'legacy-on');
+  const onAnswers = path.join(TMP, 'legacy-on.answers.json');
+  await fs.writeFile(onAnswers, JSON.stringify({
+    harness: 'claude-code', atlas: legacyEngine, skills: 'all', mcp: [], workspace: wsOn, repos: [repoB],
+  }));
+  await run(process.execPath, [CLI, 'setup', '--answers', onAnswers, '--yes'], env);
+  const m = JSON.parse(await fs.readFile(path.join(wsOn, 'manifest.json'), 'utf8'));
+  assert.deepEqual(m.kaut, { enabled: true }, 'legacy answers key lands as the canonical manifest key');
+  assert.equal(m.atlas, undefined, 'the legacy key is never written back');
+  const local = JSON.parse(await fs.readFile(path.join(wsOn, '.taut', 'local.json'), 'utf8'));
+  assert.equal(local.kautRoot, legacyEngine, 'binding recorded under the canonical key');
+  const lock = JSON.parse(await fs.readFile(path.join(wsOn, 'taut.lock'), 'utf8'));
+  assert.equal(lock.kaut, true, 'lock carries the canonical key');
+  assert.ok(await exists(path.join(wsOn, '.claude', 'skills', 'legacy-know', 'SKILL.md')), 'requires:[atlas] satisfied by kaut-on');
+  const planOn = await fs.readFile(path.join(wsOn, '.claude', 'skills', 'legacy-plan', 'SKILL.md'), 'utf8');
+  assert.match(planOn, /LEGACY-KAUT-BRANCH/, 'the atlas:on branch ships when kaut is on');
+  const instr = await fs.readFile(path.join(wsOn, 'CLAUDE.md'), 'utf8');
+  assert.match(instr, /## KAUT\n\nENABLED\./);
+  assert.ok(instr.includes(`node ${legacyEngine}/atlas.mjs`), 'invoke line falls back to the legacy CLI file that exists');
+  await run(process.execPath, [CLI, 'verify', '--workspace', wsOn], env);
 });

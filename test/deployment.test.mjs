@@ -37,7 +37,7 @@ test('a deployment with an EMPTY repo map takes every scanned repo (no curation 
   const ws = path.join(root, 'ws');
   const answersFile = path.join(TMP, 'emptymap.answers.json');
   await fs.writeFile(answersFile, JSON.stringify({
-    deployment: 'emptydep', harness: 'claude-code', atlas: false, skills: 'all', mcp: [],
+    deployment: 'emptydep', harness: 'claude-code', kaut: false, skills: 'all', mcp: [],
     workspace: ws, repos: 'scan', data: pack3,
   }));
   const { stdout } = await run(process.execPath, [CLI, 'setup', '--answers', answersFile, '--yes']);
@@ -58,7 +58,7 @@ test('deployment profile: full manifest, mandatory enforcement, unknown-repo exc
   const ws = path.join(root, 'ws');
   const answersFile = path.join(TMP, 'prof.answers.json');
   await fs.writeFile(answersFile, JSON.stringify({
-    deployment: 'fxdep', harness: 'claude-code', atlas: false, skills: 'all', mcp: [],
+    deployment: 'fxdep', harness: 'claude-code', kaut: false, skills: 'all', mcp: [],
     workspace: ws, repos: 'scan',
   }));
   const { stdout } = await run(process.execPath, [CLI, 'setup', '--answers', answersFile, '--yes']);
@@ -81,7 +81,7 @@ test('deployment profile: full manifest, mandatory enforcement, unknown-repo exc
   assert.equal(frontier.model, 'opus', 'claude-code harness resolves the claude model');
   assert.ok(frontier.models, 'per-harness maps retained in the manifest for repair fidelity');
 
-  // Stack bring-up without Atlas: the stack ENGINE (role: stack-engine — fx-stack here)
+  // Stack bring-up without KAUT: the stack ENGINE (role: stack-engine — fx-stack here)
   // is installed, per-profile wrappers GENERATED from the config's stacks; recipes are
   // runbook FILES (F4), indexed in the manifest.
   assert.ok(manifest.skills.includes('fx-stack'));
@@ -97,7 +97,7 @@ test('deployment profile: full manifest, mandatory enforcement, unknown-repo exc
   assert.match(basicRb, /Started SvcApplication/);
   const engine = await fs.readFile(path.join(ws, '.claude', 'skills', 'fx-stack', 'SKILL.md'), 'utf8');
   assert.match(engine, /\.taut\/runbooks\//);
-  assert.ok(!/atlas/i.test(engine), 'no atlas directives in the atlas-off stack engine');
+  assert.ok(!/kaut/i.test(engine), 'no kaut directives in the kaut-off stack engine');
   const lock = JSON.parse(await fs.readFile(path.join(ws, 'taut.lock'), 'utf8'));
   for (const w of ['up-basic', 'up-pdf']) {
     const wrapper = await fs.readFile(path.join(ws, '.claude', 'skills', w, 'SKILL.md'), 'utf8');
@@ -146,7 +146,7 @@ test('deployment profile: full manifest, mandatory enforcement, unknown-repo exc
   assert.match(mockRb, /dev:mock/);
   const mockSkill = await fs.readFile(path.join(ws, '.claude', 'skills', 'fx-spa', 'SKILL.md'), 'utf8');
   assert.match(mockSkill, /mock backend/);
-  assert.ok(!/atlas/i.test(mockSkill), 'atlas-off fx-spa is atlas-clean');
+  assert.ok(!/kaut/i.test(mockSkill), 'kaut-off fx-spa is kaut-clean');
 
   await run(process.execPath, [CLI, 'repair', '--workspace', ws]);
   const m2 = JSON.parse(await fs.readFile(path.join(ws, 'manifest.json'), 'utf8'));
@@ -160,7 +160,7 @@ test('codex harness: modelTiers resolve to codex models; agent pins map into sub
   const ws = path.join(root, 'ws-codex');
   const answersFile = path.join(TMP, 'prof-codex.answers.json');
   await fs.writeFile(answersFile, JSON.stringify({
-    deployment: 'fxdep', harness: 'codex', atlas: false, skills: 'all', mcp: [],
+    deployment: 'fxdep', harness: 'codex', kaut: false, skills: 'all', mcp: [],
     workspace: ws, repos: 'scan',
   }));
   await run(process.execPath, [CLI, 'setup', '--answers', answersFile, '--yes']);
@@ -173,7 +173,7 @@ test('codex harness: modelTiers resolve to codex models; agent pins map into sub
   const impl = await fs.readFile(path.join(ws, '.codex', 'agents', 'fx-implementer.toml'), 'utf8');
   assert.match(impl, /^model = "gpt-5\.6"$/m);
   assert.match(impl, /^model_reasoning_effort = "high"$/m);
-  assert.ok(!/atlas lookup/i.test(impl), 'atlas gate applies to the Codex TOML body too (this ws has atlas off)');
+  assert.ok(!/kaut lookup/i.test(impl), 'kaut gate applies to the Codex TOML body too (this ws has kaut off)');
   const plan = await fs.readFile(path.join(ws, '.codex', 'agents', 'fx-researcher.toml'), 'utf8');
   assert.match(plan, /^model = "gpt-5\.6-terra"$/m);
   assert.match(plan, /^model_reasoning_effort = "medium"$/m);
@@ -184,7 +184,7 @@ test('multi-harness: modelTiers stay per-harness maps — no flat pin for one ha
   const ws = path.join(root, 'ws-dual');
   const answersFile = path.join(TMP, 'prof-dual.answers.json');
   await fs.writeFile(answersFile, JSON.stringify({
-    deployment: 'fxdep', harnesses: ['claude-code', 'codex'], atlas: false, skills: 'all', mcp: [],
+    deployment: 'fxdep', harnesses: ['claude-code', 'codex'], kaut: false, skills: 'all', mcp: [],
     workspace: ws, repos: 'scan',
   }));
   await run(process.execPath, [CLI, 'setup', '--answers', answersFile, '--yes']);
@@ -243,7 +243,7 @@ test('react-demo (the tutorial project) compiles end-to-end: multi-harness, prof
   const ws = path.join(root, 'ws');
   const answersFile = path.join(TMP, 'react.answers.json');
   await fs.writeFile(answersFile, JSON.stringify({
-    deployment: 'react-demo', harnesses: ['claude-code', 'codex'], atlas: false, mode: 'normal',
+    deployment: 'react-demo', harnesses: ['claude-code', 'codex'], kaut: false, mode: 'normal',
     skills: ['analyze', 'implement', 'review'], mcp: ['context7'],
     repos: [path.join(root, 'react-app')], workspace: ws, data: reactPack,
   }));
@@ -294,7 +294,7 @@ test('model profile: an unknown sessionTier fails the compile', async () => {
   await commitAll(badPack, 'bad tier');
   const root = path.join(TMP, 'profroot');
   await assert.rejects(setup('badtier', {
-    deployment: 'fxdep', harness: 'claude-code', atlas: false, skills: 'all', mcp: [],
+    deployment: 'fxdep', harness: 'claude-code', kaut: false, skills: 'all', mcp: [],
     repos: [path.join(root, 'repo-core'), path.join(root, 'repo-svc')], data: badPack,
   }), /sessionTier "nope" names no ladder rung/);
 });
@@ -308,7 +308,7 @@ test('session language: deployment-declared choice — default applies, answers 
   await commitAll(langPack, 'lang choice');
   const root = path.join(TMP, 'profroot');
   const repos = [path.join(root, 'repo-core'), path.join(root, 'repo-svc')];
-  const base = { deployment: 'fxdep', harness: 'claude-code', atlas: false, skills: 'all', mcp: [], repos, data: langPack };
+  const base = { deployment: 'fxdep', harness: 'claude-code', kaut: false, skills: 'all', mcp: [], repos, data: langPack };
 
   // No answer → the declared default compiles to the FLAT manifest value; fixed keys ride untouched.
   const { ws } = await setup('lang-default', base);
@@ -348,7 +348,7 @@ test('session language: a FLAT declaration never asks and cannot be overridden',
   await commitAll(flatPack, 'flat lang');
   const root = path.join(TMP, 'profroot');
   const repos = [path.join(root, 'repo-core'), path.join(root, 'repo-svc')];
-  const base = { deployment: 'fxdep', harness: 'claude-code', atlas: false, skills: 'all', mcp: [], repos, data: flatPack };
+  const base = { deployment: 'fxdep', harness: 'claude-code', kaut: false, skills: 'all', mcp: [], repos, data: flatPack };
   const { ws } = await setup('lang-flat', base);
   const m = JSON.parse(await fs.readFile(path.join(ws, 'manifest.json'), 'utf8'));
   assert.equal(m.defaults.languages.chat, 'en', 'flat value passes through');
@@ -369,7 +369,7 @@ test('session language: the "auto" sentinel renders the mirror-the-developer ins
   const repos = [path.join(root, 'repo-core'), path.join(root, 'repo-svc')];
   // No chatLanguage key needed — auto is a flat value, setup never asks.
   const { ws } = await setup('lang-auto', {
-    deployment: 'fxdep', harness: 'claude-code', atlas: false, skills: 'all', mcp: [], repos, data: autoPack,
+    deployment: 'fxdep', harness: 'claude-code', kaut: false, skills: 'all', mcp: [], repos, data: autoPack,
   });
   const m = JSON.parse(await fs.readFile(path.join(ws, 'manifest.json'), 'utf8'));
   assert.equal(m.defaults.languages.chat, 'auto', 'sentinel passes through as the flat value');
@@ -380,39 +380,39 @@ test('session language: the "auto" sentinel renders the mirror-the-developer ins
     /declares no session-language choice/);
 });
 
-test('atlas: the enabling value IS the engine folder — bare true and a wrong path abort setup', async () => {
-  await assert.rejects(setup('atlas-bare', {
-    harness: 'claude-code', atlas: true, skills: 'all', mcp: [], repos: [repoB],
-  }), /enabling Atlas requires its folder/);
-  await assert.rejects(setup('atlas-bad', {
-    harness: 'claude-code', atlas: path.join(TMP, 'no-such-atlas'), skills: 'all', mcp: [], repos: [repoB],
-  }), /Atlas folder not usable/);
+test('kaut: the enabling value IS the engine folder — bare true and a wrong path abort setup', async () => {
+  await assert.rejects(setup('kaut-bare', {
+    harness: 'claude-code', kaut: true, skills: 'all', mcp: [], repos: [repoB],
+  }), /enabling KAUT requires its folder/);
+  await assert.rejects(setup('kaut-bad', {
+    harness: 'claude-code', kaut: path.join(TMP, 'no-such-kaut'), skills: 'all', mcp: [], repos: [repoB],
+  }), /KAUT folder not usable/);
 
-  const engineDir = path.join(TMP, 'atlas-engine');
+  const engineDir = path.join(TMP, 'kaut-engine');
   await fs.mkdir(engineDir, { recursive: true });
-  await fs.writeFile(path.join(engineDir, 'atlas.mjs'), '// engine stub\n');
-  const { ws } = await setup('atlas-on', {
-    harness: 'claude-code', atlas: engineDir, skills: 'all', mcp: [], repos: [repoB],
+  await fs.writeFile(path.join(engineDir, 'kaut.mjs'), '// engine stub\n');
+  const { ws } = await setup('kaut-on', {
+    harness: 'claude-code', kaut: engineDir, skills: 'all', mcp: [], repos: [repoB],
   });
   const local = JSON.parse(await fs.readFile(path.join(ws, '.taut', 'local.json'), 'utf8'));
-  assert.equal(local.atlasRoot, engineDir, 'engine folder recorded as a machine binding');
+  assert.equal(local.kautRoot, engineDir, 'engine folder recorded as a machine binding');
   const m = JSON.parse(await fs.readFile(path.join(ws, 'manifest.json'), 'utf8'));
-  assert.deepEqual(m.atlas, { enabled: true }, 'manifest keeps the flag only — paths stay machine-local');
+  assert.deepEqual(m.kaut, { enabled: true }, 'manifest keeps the flag only — paths stay machine-local');
   const instr = await fs.readFile(path.join(ws, 'CLAUDE.md'), 'utf8');
-  assert.match(instr, /## Atlas\n\nENABLED\. Engine: `[^`]*atlas-engine`/);
-  assert.ok(instr.includes(`node ${engineDir}/atlas.mjs`), 'instructions carry the invocation');
+  assert.match(instr, /## KAUT\n\nENABLED\. Engine: `[^`]*kaut-engine`/);
+  assert.ok(instr.includes(`node ${engineDir}/kaut.mjs`), 'instructions carry the invocation');
   await run(process.execPath, [CLI, 'verify', '--workspace', ws]);
 });
 
 test('deployment profile: missing mandatory repo fails (explicit list and scan)', async () => {
   await assert.rejects(setup('prof-missing', {
-    deployment: 'fxdep', harness: 'claude-code', atlas: false, skills: 'all', mcp: [], repos: [repoB],
+    deployment: 'fxdep', harness: 'claude-code', kaut: false, skills: 'all', mcp: [], repos: [repoB],
   }), /requires repo/);
   const emptyRoot = path.join(TMP, 'prof-empty');
   await fs.mkdir(path.join(emptyRoot, 'lonely', '.git'), { recursive: true });
   const answersFile = path.join(TMP, 'prof-empty.answers.json');
   await fs.writeFile(answersFile, JSON.stringify({
-    deployment: 'fxdep', harness: 'claude-code', atlas: false, skills: 'all', mcp: [],
+    deployment: 'fxdep', harness: 'claude-code', kaut: false, skills: 'all', mcp: [],
     workspace: path.join(emptyRoot, 'ws'), repos: 'scan',
   }));
   await assert.rejects(
@@ -425,7 +425,7 @@ test('flat model: a skills subset carries no flow doc, no agents, no stages — 
   const ws = path.join(TMP, 'ws', 'ops-only');
   const answersFile = path.join(TMP, 'ops-only.answers.json');
   await fs.writeFile(answersFile, JSON.stringify({
-    deployment: 'none', harness: 'claude-code', atlas: false,
+    deployment: 'none', harness: 'claude-code', kaut: false,
     skills: ['fx-stack', 'fx-spa'], mcp: [], workspace: ws, repos: [repoB],
   }));
   await run(process.execPath, [CLI, 'setup', '--answers', answersFile, '--yes']);
@@ -452,7 +452,7 @@ test('repo-map lint: a runbook bound to unconnected repos is excluded, its stack
   const ws = path.join(root, 'ws');
   const answersFile = path.join(TMP, 'lint.answers.json');
   await fs.writeFile(answersFile, JSON.stringify({
-    deployment: 'fxdep', harness: 'claude-code', atlas: false, skills: 'all', mcp: [],
+    deployment: 'fxdep', harness: 'claude-code', kaut: false, skills: 'all', mcp: [],
     workspace: ws, repos: 'scan',
   }));
   const { stdout } = await run(process.execPath, [CLI, 'setup', '--answers', answersFile, '--yes']);
@@ -489,7 +489,7 @@ test('artifact lints fail the compile: unknown repo binding, branch-varying meta
   const answers = async (name) => {
     const f = path.join(TMP, `${name}.answers.json`);
     await fs.writeFile(f, JSON.stringify({
-      deployment: name, harness: 'claude-code', atlas: false, skills: 'all', mcp: [],
+      deployment: name, harness: 'claude-code', kaut: false, skills: 'all', mcp: [],
       workspace: path.join(TMP, 'ws', `lint-${name}`), repos: [repoB],
     }));
     return f;
@@ -507,7 +507,7 @@ test('artifact lints fail the compile: unknown repo binding, branch-varying meta
 
   // (b) metadata.taut differing between capability branches = lint error.
   await mk('varymeta', {
-    'skills/proj-x/SKILL.md': '---\nname: proj-x\ndescription: ok\n# atlas:on\nmetadata:\n  taut:\n    requires: [atlas]\n# atlas:off\nmetadata:\n  taut: {}\n# atlas:end\n---\nbody\n',
+    'skills/proj-x/SKILL.md': '---\nname: proj-x\ndescription: ok\n# kaut:on\nmetadata:\n  taut:\n    requires: [kaut]\n# kaut:off\nmetadata:\n  taut: {}\n# kaut:end\n---\nbody\n',
   });
   await assert.rejects(
     run(process.execPath, [CLI, 'setup', '--answers', await answers('varymeta'), '--yes'], env),
@@ -533,7 +533,7 @@ test('artifact lints fail the compile: unknown repo binding, branch-varying meta
     'binding satisfied when the repo IS connected');
   const f2 = path.join(TMP, 'skillbind2.answers.json');
   await fs.writeFile(f2, JSON.stringify({
-    deployment: 'skillbind', harness: 'claude-code', atlas: false, skills: 'all', mcp: [],
+    deployment: 'skillbind', harness: 'claude-code', kaut: false, skills: 'all', mcp: [],
     workspace: path.join(TMP, 'ws', 'lint-skillbind2'), repos: [repoUnbound],
   }));
   const r2 = await run(process.execPath, [CLI, 'setup', '--answers', f2, '--yes'], env);
@@ -572,7 +572,7 @@ test('project payload: a deployment dir ships its own skills, compiled and locke
   const ws = path.join(TMP, 'ws', 'proj');
   const answersFile = path.join(TMP, 'proj.answers.json');
   await fs.writeFile(answersFile, JSON.stringify({
-    deployment: 'demo', harness: 'claude-code', atlas: false, skills: 'all', mcp: [],
+    deployment: 'demo', harness: 'claude-code', kaut: false, skills: 'all', mcp: [],
     workspace: ws, repos: [repoB],
   }));
   await run(process.execPath, [CLI, 'setup', '--answers', answersFile, '--yes'],
@@ -617,7 +617,7 @@ test('project layer: a project catalog overrides MCP pins; a project LAWS.md ove
   const ws = path.join(TMP, 'ws', 'layered');
   const answersFile = path.join(TMP, 'layered.answers.json');
   await fs.writeFile(answersFile, JSON.stringify({
-    deployment: 'proj', harness: 'claude-code', atlas: false, skills: 'all', mcp: ['context7'],
+    deployment: 'proj', harness: 'claude-code', kaut: false, skills: 'all', mcp: ['context7'],
     workspace: ws, repos: [repoB],
   }));
   await run(process.execPath, [CLI, 'setup', '--answers', answersFile, '--yes'],
@@ -634,7 +634,7 @@ test('project layer: a project catalog overrides MCP pins; a project LAWS.md ove
 test('deployment selection is required non-interactively when configs exist', async () => {
   const answersFile = path.join(TMP, 'nodepl.answers.json');
   await fs.writeFile(answersFile, JSON.stringify({
-    harness: 'claude-code', atlas: false, skills: 'all', mcp: [],
+    harness: 'claude-code', kaut: false, skills: 'all', mcp: [],
     workspace: path.join(TMP, 'ws', 'nodepl'), repos: [repoB],
   }));
   await assert.rejects(
@@ -653,7 +653,7 @@ test('repo-scaffold: auto-init of missing descriptors — skeleton into the pack
   const ws = path.join(root, 'ws');
   const answersFile = path.join(TMP, 'scaf.answers.json');
   await fs.writeFile(answersFile, JSON.stringify({
-    deployment: 'fxdep', harness: 'claude-code', atlas: false, skills: 'all', mcp: [],
+    deployment: 'fxdep', harness: 'claude-code', kaut: false, skills: 'all', mcp: [],
     workspace: ws, repos: 'scan', data: pack2,
   }));
   const first = await run(process.execPath, [CLI, 'setup', '--answers', answersFile, '--yes']);
@@ -689,7 +689,7 @@ test('repo-scaffold: auto-init of missing descriptors — skeleton into the pack
   // PACK MODE is project-scoped: a `deployment: none` workspace refuses it — but the
   // DEFAULT (workspace instance) mode works everywhere.
   const { ws: wsNone } = await setup('scaf-none', {
-    harness: 'claude-code', atlas: false, skills: ['fx-stack'], mcp: [], repos: [repoB],
+    harness: 'claude-code', kaut: false, skills: ['fx-stack'], mcp: [], repos: [repoB],
   });
   await assert.rejects(run(process.execPath, [CLI, 'repo-scaffold', '--pack', '--workspace', wsNone]), /project-scoped/);
   const sNone = await run(process.execPath, [CLI, 'repo-scaffold', '--workspace', wsNone]);

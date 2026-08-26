@@ -2,6 +2,7 @@
 // gate hook wiring, Codex subagent TOML, and the workspace CLAUDE.md / AGENTS.md
 // instructions. Copy artifacts (skills, agents .md, gate, LAWS.md) are not rendered —
 // they are installed byte-for-byte by lib/install.mts.
+import { existsSync } from 'node:fs';
 import path from 'node:path';
 
 import { FRAMEWORK_OWNED_NOTE, MCP_CATALOG, langName } from './constants.mts';
@@ -17,6 +18,12 @@ const launcherEntry = (cfg: Cfg, id: string): { command: string; args: string[] 
   command: 'node',
   args: [path.join(cfg.workspace, '.taut', 'mcp-launch.mjs'), id],
 });
+
+// The KAUT engine CLI file at the recorded root, resolved at render time: prefer the
+// canonical kaut.mjs, fall back to a legacy engine checkout still shipping atlas.mjs
+// (resolveKautRoot accepts either) — the rendered invoke line must name a file that
+// actually exists.
+const kautCli = (root: string): string => (existsSync(path.join(root, 'kaut.mjs')) ? 'kaut.mjs' : 'atlas.mjs');
 
 export function renderMcpJson(cfg: Cfg): string {
   const servers: Record<string, { command: string; args: string[] }> = {};
@@ -245,8 +252,8 @@ Run the framework skill **\`${engine}\`** with \`PROFILE = ${name}\` for this de
 The profile is defined in \`manifest.json\` → \`stacks.${name}\`:
 ${parts.map((l) => `- ${l}`).join('\n')}
 
-This entry adds NOTHING authoritative: ${cfg.atlas
-    ? 'the bring-up recipe is read from Atlas at run time (`runbook/local-startup` + each service repo\'s `runbook/local-debug`)'
+This entry adds NOTHING authoritative: ${cfg.kaut
+    ? 'the bring-up recipe is read from KAUT at run time (`runbook/local-startup` + each service repo\'s `runbook/local-debug`)'
     : `the bring-up recipe is the deployment runbook${rb ? ` \`.taut/runbooks/${rb}.md\`` : ''} plus the shared values (\`.taut/runbooks/ops-shared.md\` when shipped; index: manifest \`runbooks\`)`} and the
 procedure, guards, freshness/drift discipline and fallback all live in \`${engine}\`.
 Follow that skill. Per L4 a stack is never the default — invoke only once this tier is
@@ -449,15 +456,15 @@ ${cfg.mcp.length ? cfg.mcp.map((id) => {
     return `- **${c.role}**: \`${c.serverKey}\` (${c.package}) — credentials via \`.taut/local.env\`${c.fixedEnv.READ_ONLY_MODE ? '; read-only mode enforced' : ''}${c.usage ? `. ${c.usage}` : ''}`;
   }).join('\n') : '- none installed'}
 
-## Atlas
+## KAUT
 
-${cfg.atlas
-    ? `ENABLED.${cfg.atlasRoot ? ` Engine: \`${cfg.atlasRoot}\` — invoke as \`node ${cfg.atlasRoot}/atlas.mjs <command>\` from a member-repo root (store resolution is cwd-based).` : ''} Knowledge lookups per the trust hierarchy.${roleSkill('knowledge') ? ` Self-maintenance via the \`${roleSkill('knowledge')}\` skill (role: knowledge).` : ''}`
+${cfg.kaut
+    ? `ENABLED.${cfg.kautRoot ? ` Engine: \`${cfg.kautRoot}\` — invoke as \`node ${cfg.kautRoot}/${kautCli(cfg.kautRoot)} <command>\` from a member-repo root (store resolution is cwd-based).` : ''} Knowledge lookups per the trust hierarchy.${roleSkill('knowledge') ? ` Self-maintenance via the \`${roleSkill('knowledge')}\` skill (role: knowledge).` : ''}`
     : `DISABLED at setup. Skills operate code-first (code-as-read is ground truth);
-Atlas-dependent skills are not installed and Atlas directives are compiled OUT of the
-installed skills/agents. The \`atlas\` CLI must NOT be invoked from this workspace — no
-lookups, no distillation, no store writes; if any Atlas mention survives anywhere, treat
-it as inert text, not an instruction.`}
+KAUT-dependent skills are not installed and KAUT directives are compiled OUT of the
+installed skills/agents. The \`kaut\` CLI (or the legacy \`atlas\` CLI) must NOT be
+invoked from this workspace — no lookups, no distillation, no store writes; if any KAUT
+mention survives anywhere, treat it as inert text, not an instruction.`}
 `;
 }
 

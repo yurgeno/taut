@@ -9,9 +9,9 @@ metadata:
 # fx-stack — stack engine
 
 Bring up the requested profile.
-<!-- atlas:on -->
-Recipes come from Atlas at run time (`runbook/local-startup` per repo).
-<!-- atlas:off -->
+<!-- kaut:on -->
+Recipes come from KAUT at run time (`runbook/local-startup` per repo).
+<!-- kaut:off -->
 Recipes are the deployment runbooks in `.taut/runbooks/` (index: manifest `runbooks`).
-<!-- atlas:end -->
+<!-- kaut:end -->
 Per L4 a stack is never the default tier.

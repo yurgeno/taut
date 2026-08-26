@@ -23,7 +23,7 @@ after(reset);
 // `execSync(\`git rev-list --count ${pin}..HEAD\`)`; a pin of "; touch MARKER; " would run.
 test('S1: an injected git pin is rejected, never shell-executed (status)', async () => {
   const { ws } = await setup('inj-status', {
-    harness: 'claude-code', atlas: false, skills: 'all', mcp: [], repos: [repoB],
+    harness: 'claude-code', kaut: false, skills: 'all', mcp: [], repos: [repoB],
   });
   const marker = path.join(TMP, 'PWNED_STATUS');
   const lockPath = path.join(ws, 'taut.lock');
@@ -46,7 +46,7 @@ test('S1: an injected git pin is rejected, never shell-executed (status)', async
 // payload-shaped id; a traversal id resolved to a sibling dir and wiped it.
 test('S2: a traversal artifact id cannot make the sweep delete outside the workspace (repair)', async () => {
   const { ws } = await setup('trav-repair', {
-    harness: 'claude-code', atlas: false, skills: 'all', mcp: [], repos: [repoB],
+    harness: 'claude-code', kaut: false, skills: 'all', mcp: [], repos: [repoB],
   });
   const victim = path.join(TMP, 'victim');
   await fs.mkdir(victim, { recursive: true });
@@ -70,7 +70,7 @@ test('S2: a traversal artifact id cannot make the sweep delete outside the works
 // S1 (gate) — the shipped gate's sessionstart advisory execs git with a lock pin too.
 test('S1: the gate rejects an injected pin in its sessionstart advisory', async () => {
   const { ws } = await setup('inj-gate', {
-    harness: 'claude-code', atlas: false, skills: 'all', mcp: [], repos: [repoB],
+    harness: 'claude-code', kaut: false, skills: 'all', mcp: [], repos: [repoB],
   });
   const marker = path.join(TMP, 'PWNED_GATE');
   const lockPath = path.join(ws, 'taut.lock');

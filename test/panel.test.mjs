@@ -22,7 +22,7 @@ const readManifest = async (ws) => JSON.parse(await fs.readFile(path.join(ws, 'm
 
 test('apply: skill toggle sweeps files, records skillsExcluded; update never resurrects; re-enable clears', async () => {
   const { ws } = await setup('apply', {
-    harness: 'claude-code', atlas: false, skills: 'all', mcp: ['context7'], repos: [repoB],
+    harness: 'claude-code', kaut: false, skills: 'all', mcp: ['context7'], repos: [repoB],
   });
   assert.ok(await exists(path.join(ws, '.claude', 'skills', 'fx-final', 'SKILL.md')));
 
@@ -55,7 +55,7 @@ test('apply: skill toggle sweeps files, records skillsExcluded; update never res
 
 test('apply: mcp toggle regates artifacts and sweeps .mcp.json when the last server leaves', async () => {
   const { ws } = await setup('apply-mcp', {
-    harness: 'claude-code', atlas: false, skills: 'all', mcp: ['context7'], repos: [repoB],
+    harness: 'claude-code', kaut: false, skills: 'all', mcp: ['context7'], repos: [repoB],
   });
   assert.match(await fs.readFile(path.join(ws, '.claude', 'agents', 'fx-researcher.md'), 'utf8'), /context7/);
 
@@ -70,13 +70,13 @@ test('apply: mcp toggle regates artifacts and sweeps .mcp.json when the last ser
   assert.match(await fs.readFile(path.join(ws, '.claude', 'agents', 'fx-researcher.md'), 'utf8'), /context7/);
 });
 
-test('apply guards: atlas-required and unknown names refused with reasons', async () => {
+test('apply guards: kaut-required and unknown names refused with reasons', async () => {
   const { ws } = await setup('apply-guard', {
-    harness: 'claude-code', atlas: false, skills: 'all', mcp: [], repos: [repoB],
+    harness: 'claude-code', kaut: false, skills: 'all', mcp: [], repos: [repoB],
   });
   await assert.rejects(
     run(process.execPath, [CLI, 'apply', '--workspace', ws, '--enable-skill', 'fx-knowledge']),
-    /requires Atlas/,
+    /requires KAUT/,
   );
   await assert.rejects(
     run(process.execPath, [CLI, 'apply', '--workspace', ws, '--enable-skill', 'nope']),
@@ -90,7 +90,7 @@ test('apply guards: atlas-required and unknown names refused with reasons', asyn
 
 test('panel: state contract, token guard, apply + repair through the server', async () => {
   const { ws } = await setup('panel-ws', {
-    harness: 'claude-code', atlas: false, skills: 'all', mcp: [], repos: [repoB],
+    harness: 'claude-code', kaut: false, skills: 'all', mcp: [], repos: [repoB],
   });
   const p = await startPanel(ws, { port: 0 });
   const base = `http://127.0.0.1:${p.port}`;
@@ -104,7 +104,7 @@ test('panel: state contract, token guard, apply + repair through the server', as
     assert.equal(state.skills.filter((s) => s.installed).length, 10);
     const ku = state.skills.find((s) => s.name === 'fx-knowledge');
     assert.equal(ku.installed, false);
-    assert.equal(ku.blocked, 'requires atlas', 'blocked skills carry the reason');
+    assert.equal(ku.blocked, 'requires kaut', 'blocked skills carry the reason');
     assert.ok(state.mcp.every((m) => m.env.every((e) => typeof e.filled === 'boolean' && !('value' in e))),
       'env status is names + filled flags only — never values');
     assert.equal(state.status.current, true);
@@ -215,7 +215,7 @@ test('apply: repo toggles — disconnect sweeps repo data, connect re-installs o
   const ws = path.join(root, 'ws');
   const answersFile = path.join(TMP, 'toggle.answers.json');
   await fs.writeFile(answersFile, JSON.stringify({
-    deployment: 'fxdep', harness: 'claude-code', atlas: false, skills: 'all', mcp: [],
+    deployment: 'fxdep', harness: 'claude-code', kaut: false, skills: 'all', mcp: [],
     workspace: ws, repos: 'scan', data: pack2,
   }));
   await run(process.execPath, [CLI, 'setup', '--answers', answersFile, '--yes']);

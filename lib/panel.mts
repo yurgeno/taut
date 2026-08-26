@@ -22,7 +22,7 @@ import type { Server } from 'node:http';
 import type { AddressInfo } from 'node:net';
 
 import { FW_ROOT, HARNESSES, MCP_CATALOG, initDataFor } from './constants.mts';
-import { atlasRequired, lintRepoBindings, loadCatalog } from './artifacts.mts';
+import { kautRequired, lintRepoBindings, loadCatalog } from './artifacts.mts';
 import { listDeployments, scanRepos } from './config.mts';
 import { statusData } from './commands.mts';
 import { memoryRootFor } from './install.mts';
@@ -151,8 +151,9 @@ async function stateFor(ws: string): Promise<any> {
   const repoExcluded = lintRepoBindings(
     [...catalog.skills].map(([n, s]) => ({ kind: 'skill', name: n, repos: s.meta.repos })),
     profile, connected, []);
-  const atlasReq = atlasRequired(catalog);
-  const atlas = Boolean(manifest.atlas?.enabled);
+  const kautReq = kautRequired(catalog);
+  // Legacy manifest (pre-rename) carries `atlas` until its first recompile migrates it.
+  const kaut = Boolean(manifest.kaut?.enabled ?? manifest.atlas?.enabled);
   const installed = new Set(manifest.skills ?? []);
 
   const skills = [...catalog.skills].map(([name, s]) => ({
@@ -161,7 +162,7 @@ async function stateFor(ws: string): Promise<any> {
     origin: s.origin,
     installed: installed.has(name),
     excluded: (manifest.skillsExcluded ?? []).includes(name),
-    blocked: (!atlas && atlasReq.includes(name)) ? 'requires atlas'
+    blocked: (!kaut && kautReq.includes(name)) ? 'requires kaut'
       : repoExcluded.has(name)
         ? `repo-excluded: ${(s.meta.repos ?? []).filter((r) => !connected.has(r)).join(', ')}`
         : null,
@@ -233,7 +234,7 @@ async function stateFor(ws: string): Promise<any> {
     deployment: manifest.deployment ?? null,
     harnesses: manifest.harnesses ?? (manifest.harness ? [manifest.harness] : []),
     harnessesAvailable: [...HARNESSES],
-    atlas,
+    kaut,
     mode: manifest.mode ?? 'normal',
     skillsSelection: manifest.skillsSelection ?? 'custom',
     skillsExcluded: manifest.skillsExcluded ?? [],

@@ -443,9 +443,9 @@ function render() {
   b += state.mode === "strict"
     ? bd("mode: STRICT", "only the compiled toolchain runs — foreign skills/agents/MCP are denied at invocation by the gate (harness built-ins unaffected); the Mode button lifts it in one recompile", "warn")
     : bd("mode: normal", "framework artifacts coexist with your own skills/agents/MCP — the gate only guards what it manages; the Mode button switches to STRICT in one recompile");
-  b += bd("atlas " + (state.atlas ? "on" : "off"), state.atlas
-    ? "Atlas knowledge-engine integration is ON: lookup discipline + self-maintenance skills are installed"
-    : "Atlas integration is OFF: skills operate code-first, Atlas directives are compiled OUT of the installed artifacts");
+  b += bd("kaut " + (state.kaut ? "on" : "off"), state.kaut
+    ? "KAUT knowledge-engine integration is ON: lookup discipline + self-maintenance skills are installed"
+    : "KAUT integration is OFF: skills operate code-first, KAUT directives are compiled OUT of the installed artifacts");
   b += st.current
     ? bd("ACTUAL · pin " + esc((fw.pin || "").slice(0, 7)),
       "up to date: the workspace matches its pinned framework + data-pack commits, and every artifact matches the integrity lock", "ok")

@@ -20,6 +20,6 @@ Best practices via the docs MCP: resolve-library-id then query-docs, before web 
 <!-- mcp-docs:off -->
 Best practices via web search.
 <!-- mcp-docs:end -->
-<!-- atlas:on -->
-Consult `atlas lookup` per the trust hierarchy before concluding a root cause.
-<!-- atlas:end -->
+<!-- kaut:on -->
+Consult `kaut lookup` per the trust hierarchy before concluding a root cause.
+<!-- kaut:end -->

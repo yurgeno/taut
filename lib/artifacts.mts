@@ -13,14 +13,14 @@ import path from 'node:path';
 
 import { requireData } from './constants.mts';
 import { exists, fail } from './util.mts';
-import { applyMarkers } from './markers.mts';
+import { applyMarkers, withLegacyGates } from './markers.mts';
 import type { Catalog, Profile, RepoDocFile } from './types.mts';
 
 // Known capability-gate keys — must mirror capabilityGates (lib/install.mts) and the
 // verify reconstruction (lib/lock.mts). Catalog metadata is parsed under BOTH extreme
 // gate settings and must not vary between them (wiring is capability-independent).
-const GATE_KEYS = ['atlas', 'mcp-docs'];
-const gatesAll = (v: boolean): Record<string, boolean> => Object.fromEntries(GATE_KEYS.map((k) => [k, v]));
+const GATE_KEYS = ['kaut', 'mcp-docs']; // legacy marker key `atlas` = alias of the kaut gate
+const gatesAll = (v: boolean): Record<string, boolean> => withLegacyGates(Object.fromEntries(GATE_KEYS.map((k) => [k, v])));
 
 // ---------------------------------------------------------------- frontmatter (subset)
 
@@ -231,9 +231,13 @@ export async function loadCatalog(profile: Profile | null): Promise<Catalog> {
 // chain-gap warnings; a flow is never installed, only documented.
 export const stageChain = (catalog: Pick<Catalog, 'flowDocs'>): string[] => catalog.flowDocs.flatMap((f) => f.sequence);
 
-// Skills that declare `requires: [atlas]` — filtered out when the workspace has no Atlas.
-export const atlasRequired = (catalog: Pick<Catalog, 'skills'>): string[] =>
-  [...catalog.skills].filter(([, s]) => (s.meta.requires ?? []).includes('atlas')).map(([n]) => n);
+// Skills that declare `requires: [kaut]` — filtered out when the workspace has no KAUT.
+// The legacy `atlas` requirement is an alias (pre-rename pack skills gate identically).
+export const kautRequired = (catalog: Pick<Catalog, 'skills'>): string[] =>
+  [...catalog.skills].filter(([, s]) => {
+    const req = s.meta.requires ?? [];
+    return req.includes('kaut') || req.includes('atlas');
+  }).map(([n]) => n);
 
 // Agents are installed only when a selected skill names them in metadata.taut.agents
 // — an agent no skill references stays uninstalled (dead payload, by design).

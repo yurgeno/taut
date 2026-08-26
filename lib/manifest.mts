@@ -123,7 +123,7 @@ export function buildManifest(cfg: Cfg): Record<string, any> {
     deployment: prof?.name,
     description: prof?.description,
     harnesses: cfg.harnesses,
-    atlas: { enabled: cfg.atlas },
+    kaut: { enabled: cfg.kaut },
     mode: cfg.mode ?? 'normal',
     // Usage-telemetry level (an ENGINE-owned setup choice; default extended). Local-only
     // by law: daily files under memory/telemetry/, never sent anywhere, no personal data.

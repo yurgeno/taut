@@ -1,9 +1,9 @@
 ---
 name: fx-bootstrap
-description: 'Bootstrap a member-repo knowledge store (fixture). Requires Atlas.'
+description: 'Bootstrap a member-repo knowledge store (fixture). Requires KAUT.'
 metadata:
   taut:
-    requires: [atlas]
+    requires: [kaut]
 ---
 
 # fx-bootstrap — store bootstrap

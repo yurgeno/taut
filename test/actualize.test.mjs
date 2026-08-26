@@ -38,7 +38,7 @@ test('update does NOT claim "already current" when the pack has uncommitted cont
   // skill) BEFORE they are committed. Judging the data axis by its commit alone made
   // update report "already current" and install nothing.
   const { ws } = await setup('update-dirty-pack', {
-    harness: 'claude-code', atlas: false, skills: 'all', mcp: [], repos: [repoB],
+    harness: 'claude-code', kaut: false, skills: 'all', mcp: [], repos: [repoB],
   });
   const first = await run(process.execPath, [CLI, 'update', '--workspace', ws]);
   assert.match(first.stdout, /already current/, 'a clean, unmoved pack still short-circuits');
@@ -52,7 +52,7 @@ test('update does NOT claim "already current" when the pack has uncommitted cont
 
 test('status: a fresh workspace is ACTUAL (json contract, exit 0)', async () => {
   const { ws } = await setup('st-fresh', {
-    harness: 'claude-code', atlas: false, skills: 'all', mcp: [], repos: [repoB],
+    harness: 'claude-code', kaut: false, skills: 'all', mcp: [], repos: [repoB],
   });
   const st = await status(ws);
   assert.equal(st.code, 0);
@@ -64,7 +64,7 @@ test('status: a fresh workspace is ACTUAL (json contract, exit 0)', async () => 
 
 test('staleness: old pin → status BEHIND, gate advises update at session start, update re-pins', async () => {
   const { ws } = await setup('st-stale', {
-    harness: 'claude-code', atlas: false, skills: 'all', mcp: [], repos: [repoB],
+    harness: 'claude-code', kaut: false, skills: 'all', mcp: [], repos: [repoB],
   });
   await fakeOldPin(ws);
 
@@ -89,18 +89,18 @@ test('staleness: old pin → status BEHIND, gate advises update at session start
 });
 
 test('update: an "all" selection follows the shipped payload — installs added, sweeps dropped', async () => {
-  const atlasStub = path.join(TMP, 'atlas-stub'); // enabling Atlas requires a real engine folder
-  await fs.mkdir(atlasStub, { recursive: true });
-  await fs.writeFile(path.join(atlasStub, 'atlas.mjs'), '// engine stub\n');
+  const kautStub = path.join(TMP, 'kaut-stub'); // enabling KAUT requires a real engine folder
+  await fs.mkdir(kautStub, { recursive: true });
+  await fs.writeFile(path.join(kautStub, 'kaut.mjs'), '// engine stub\n');
   const { ws } = await setup('all-follow', {
-    harness: 'claude-code', atlas: atlasStub, skills: 'all', mcp: [], repos: [repoB],
+    harness: 'claude-code', kaut: kautStub, skills: 'all', mcp: [], repos: [repoB],
   });
   assert.ok(await exists(path.join(ws, '.claude', 'skills', 'fx-knowledge', 'SKILL.md')));
 
-  // Simulate the selectable payload shrinking (here: the atlas flag drops 3 skills; a new
+  // Simulate the selectable payload shrinking (here: the kaut flag drops 3 skills; a new
   // framework version dropping a skill exercises the same path).
   const m = await readManifest(ws);
-  m.atlas.enabled = false;
+  m.kaut.enabled = false;
   await fs.writeFile(path.join(ws, 'manifest.json'), JSON.stringify(m, null, 2) + '\n');
   let out = (await run(process.execPath, [CLI, 'update', '--workspace', ws])).stdout;
   assert.match(out, /no longer shipped — removing:.*fx-knowledge/);
@@ -111,7 +111,7 @@ test('update: an "all" selection follows the shipped payload — installs added,
 
   // And growing again (a new version shipping new skills installs them for "all").
   const m2 = await readManifest(ws);
-  m2.atlas.enabled = true;
+  m2.kaut.enabled = true;
   await fs.writeFile(path.join(ws, 'manifest.json'), JSON.stringify(m2, null, 2) + '\n');
   out = (await run(process.execPath, [CLI, 'update', '--workspace', ws])).stdout;
   assert.match(out, /new in this version — installing:.*fx-knowledge/);
@@ -121,7 +121,7 @@ test('update: an "all" selection follows the shipped payload — installs added,
 
 test('update: a custom selection stays fixed and only advertises new skills', async () => {
   const { ws } = await setup('custom-keep', {
-    harness: 'claude-code', atlas: false, skills: ['fx-task'], mcp: [], repos: [repoB],
+    harness: 'claude-code', kaut: false, skills: ['fx-task'], mcp: [], repos: [repoB],
   });
   assert.equal((await readManifest(ws)).skillsSelection, 'custom');
   await fakeOldPin(ws); // make it non-current so update actually runs
@@ -134,7 +134,7 @@ test('update: a custom selection stays fixed and only advertises new skills', as
 
 test('memory/ is instance data: setup re-run, update and repair preserve it byte-for-byte', async () => {
   const { ws } = await setup('memory-keep', {
-    harness: 'claude-code', atlas: false, skills: 'all', mcp: [], repos: [repoB],
+    harness: 'claude-code', kaut: false, skills: 'all', mcp: [], repos: [repoB],
   });
   const files = {
     'memory/spec/T-1/report.md': '# agent report\nfindings survive reinstalls\n',
@@ -147,7 +147,7 @@ test('memory/ is instance data: setup re-run, update and repair preserve it byte
   }
 
   // Reinstall (setup into the same folder), then a pin-moving update, then a repair.
-  await setup('memory-keep', { harness: 'claude-code', atlas: false, skills: 'all', mcp: [], repos: [repoB] });
+  await setup('memory-keep', { harness: 'claude-code', kaut: false, skills: 'all', mcp: [], repos: [repoB] });
   await fakeOldPin(ws);
   await run(process.execPath, [CLI, 'update', '--workspace', ws]);
   await fs.appendFile(path.join(ws, 'CLAUDE.md'), '\ndrift\n');
@@ -169,7 +169,7 @@ test('memory/ is instance data: setup re-run, update and repair preserve it byte
   assert.equal(await fs.readFile(path.join(sibling, 'notes.md'), 'utf8'), files['memory/notes.md'],
     'contents physically live in the sibling folder');
   await fs.rm(ws, { recursive: true, force: true });
-  await setup('memory-keep', { harness: 'claude-code', atlas: false, skills: 'all', mcp: [], repos: [repoB] });
+  await setup('memory-keep', { harness: 'claude-code', kaut: false, skills: 'all', mcp: [], repos: [repoB] });
   for (const [rel, content] of Object.entries(files))
     assert.equal(await fs.readFile(path.join(ws, rel), 'utf8'), content,
       `${rel} must survive workspace deletion + recompile`);
@@ -179,7 +179,7 @@ test('memory externalization: legacy in-workspace dir migrates by rename; both l
   const ws = path.join(TMP, 'ws', 'legacy-mem');
   await fs.mkdir(path.join(ws, 'memory', 'spec', 'T-9'), { recursive: true });
   await fs.writeFile(path.join(ws, 'memory', 'spec', 'T-9', 'log.md'), 'old layout\n');
-  await setup('legacy-mem', { harness: 'claude-code', atlas: false, skills: 'all', mcp: [], repos: [repoB] });
+  await setup('legacy-mem', { harness: 'claude-code', kaut: false, skills: 'all', mcp: [], repos: [repoB] });
   const root = path.join(TMP, 'ws', 'legacy-mem-memory');
   assert.equal(await fs.readFile(path.join(root, 'spec', 'T-9', 'log.md'), 'utf8'), 'old layout\n',
     'migrated to the sibling by a single rename');
@@ -194,14 +194,14 @@ test('memory externalization: legacy in-workspace dir migrates by rename; both l
   await fs.writeFile(path.join(ws2, 'memory', 'a.md'), 'x');
   await fs.mkdir(path.join(TMP, 'ws', 'conflict-mem-memory'), { recursive: true });
   await assert.rejects(
-    setup('conflict-mem', { harness: 'claude-code', atlas: false, skills: 'all', mcp: [], repos: [repoB] }),
+    setup('conflict-mem', { harness: 'claude-code', kaut: false, skills: 'all', mcp: [], repos: [repoB] }),
     /merge them manually/,
   );
 });
 
 test('update: already-current workspace is a no-op; repair notes when it also moved the pin', async () => {
   const { ws } = await setup('noop', {
-    harness: 'claude-code', atlas: false, skills: 'all', mcp: [], repos: [repoB],
+    harness: 'claude-code', kaut: false, skills: 'all', mcp: [], repos: [repoB],
   });
   const { stdout } = await run(process.execPath, [CLI, 'update', '--workspace', ws]);
   assert.match(stdout, /already current/);
@@ -220,7 +220,7 @@ test('update --data-only: pack-only actualization — new skill + descriptor flo
   const ws = path.join(root, 'ws');
   const answersFile = path.join(TMP, 'dataonly.answers.json');
   await fs.writeFile(answersFile, JSON.stringify({
-    deployment: 'fxdep', harness: 'claude-code', atlas: false, skills: 'all', mcp: [],
+    deployment: 'fxdep', harness: 'claude-code', kaut: false, skills: 'all', mcp: [],
     workspace: ws, repos: 'scan', data: pack2,
   }));
   await run(process.execPath, [CLI, 'setup', '--answers', answersFile, '--yes']);
@@ -256,7 +256,7 @@ test('update --data-only: pack-only actualization — new skill + descriptor flo
 
 test('rename migration: a pre-rename .federation workspace migrates in place on update', async () => {
   const { ws } = await setup('legacy-rename', {
-    harness: 'claude-code', atlas: false, skills: 'all', mcp: ['context7'], repos: [repoB],
+    harness: 'claude-code', kaut: false, skills: 'all', mcp: ['context7'], repos: [repoB],
   });
   // Convert the fresh workspace to the pre-rename FEDERATION layout: directory name,
   // lock filename, lock artifact ids — exactly what a workspace compiled before

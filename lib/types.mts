@@ -90,11 +90,11 @@ export interface Cfg {
   // Enabled harnesses, canonical HARNESSES order, never empty. Every enabled harness
   // gets its full native artifact set (the trees are disjoint by construction).
   harnesses: string[];
-  atlas: boolean;
-  // Atlas engine folder — a machine-local PATH, persisted in .taut/local.json next to
-  // the repo paths (never in the manifest). Setup REQUIRES it whenever atlas is
+  kaut: boolean;
+  // KAUT engine folder — a machine-local PATH, persisted in .taut/local.json next to
+  // the repo paths (never in the manifest). Setup REQUIRES it whenever kaut is
   // enabled; null on legacy workspaces that recorded only the flag.
-  atlasRoot?: string | null;
+  kautRoot?: string | null;
   mode: string;
   // Usage-telemetry level ('basic' | 'extended') — an ENGINE-owned setup choice
   // (default extended; pack-independent). Local-only by law: daily files under
@@ -157,13 +157,14 @@ export interface Lock {
   // Model profile's session pin per enabled harness (modelTiers.sessionTier) — the
   // gate's session-start advisory compares the live model against it. Absent = no policy.
   session?: Record<string, { model?: string; effort?: string }>;
-  atlas: boolean;
+  kaut: boolean;
+  atlas?: boolean; // legacy (pre-rename lock) — read-only fallback, never written
   mode?: string;
   // Telemetry level — the gate reads it from the lock (the same tamper-anchored root as
   // `mode`). Absent (legacy lock) = extended, the default.
   telemetry?: string;
   // Resolved workspace stacks at compile — `verify --source` rebuilds the stack-*
-  // marker gates from this (like atlas/mcp-docs). Absent (legacy lock) = none.
+  // marker gates from this (like kaut/mcp-docs). Absent (legacy lock) = none.
   stacks?: string[];
   artifacts: ArtifactRow[];
   mcp: { id: string; role: string; serverKey: string; package: string; pin: string; runner: string }[];
@@ -185,7 +186,7 @@ export interface StatusData {
   workspace: string;
   deployment: string | null;
   harnesses: string[];
-  atlas: boolean;
+  kaut: boolean;
   generatedAt: string;
   framework: {
     pin: string | null;

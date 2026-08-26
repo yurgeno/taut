@@ -115,7 +115,9 @@ export const HARNESSES = ['claude-code', 'codex', 'opencode'];
 // stays reserved defensively: it was the pre-flat-model flow-package record and must never ride
 // in from a config again.
 export const OWNED_MANIFEST_KEYS = new Set([
-  'name', 'framework', 'deployment', 'description', 'harness', 'harnesses', 'atlas', 'mode', 'telemetry', 'flow', 'flows',
+  // `atlas` stays reserved next to the canonical `kaut`: it is the pre-rename key —
+  // legacy manifests carry it and a config bag must never smuggle it back in.
+  'name', 'framework', 'deployment', 'description', 'harness', 'harnesses', 'kaut', 'atlas', 'mode', 'telemetry', 'flow', 'flows',
   'flowDocs', 'runbooks', 'repoDocs', 'skills', 'skillsSelection', 'skillsExcluded',
   'agents', 'mcp', 'repos', 'laws',
 ]);

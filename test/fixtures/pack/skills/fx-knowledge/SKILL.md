@@ -1,9 +1,9 @@
 ---
 name: fx-knowledge
-description: 'Self-maintenance loop for the knowledge store (fixture). Requires Atlas.'
+description: 'Self-maintenance loop for the knowledge store (fixture). Requires KAUT.'
 metadata:
   taut:
-    requires: [atlas]
+    requires: [kaut]
     role: knowledge
 ---
 

@@ -8,7 +8,7 @@ import process from 'node:process';
 
 import { FW_ROOT, MCP_CATALOG, PACK_NAME, requireData } from './constants.mts';
 import { dim, fail, gitInfo, gitInfoOwn, green, red, readIfExists, sha256, yellow } from './util.mts';
-import { applyMarkers } from './markers.mts';
+import { applyMarkers, withLegacyGates } from './markers.mts';
 import { rungEffort, sessionRung } from './manifest.mts';
 import type { ArtifactRow, Cfg, Lock } from './types.mts';
 
@@ -40,7 +40,7 @@ export async function writeLock(cfg: Cfg, artifacts: ArtifactRow[]): Promise<Loc
       }
       return Object.keys(session).length ? { session } : {};
     })(),
-    atlas: cfg.atlas,
+    kaut: cfg.kaut,
     // Strict/normal mode: the gate reads the MODE from the lock — the same
     // tamper-anchored root it verifies artifacts against. Absent (legacy lock) = normal.
     mode: cfg.mode ?? 'normal',
@@ -48,7 +48,7 @@ export async function writeLock(cfg: Cfg, artifacts: ArtifactRow[]): Promise<Loc
     // extra reads on the event path. Absent (legacy lock) = extended, the default.
     telemetry: cfg.telemetry === 'basic' ? 'basic' : 'extended',
     // Resolved workspace stacks — verify --source rebuilds the stack-* marker gates
-    // from this, the same way atlas/mcp-docs gates rebuild from the lock.
+    // from this, the same way kaut/mcp-docs gates rebuild from the lock.
     ...(cfg.stacks?.length ? { stacks: cfg.stacks } : {}),
     artifacts,
     mcp: cfg.mcp.map((id) => {
@@ -63,13 +63,22 @@ export async function writeLock(cfg: Cfg, artifacts: ArtifactRow[]): Promise<Loc
   return lock;
 }
 
+// Rename normalization (Atlas → KAUT): a legacy lock carries `atlas` — folded into the
+// canonical `kaut` key ONCE at load (every lock loader calls this); consumers read
+// `lock.kaut` only. The legacy key is left in place: a legacy lock is never rewritten
+// until its workspace recompiles.
+export function normalizeLock(lock: Lock): Lock {
+  lock.kaut = Boolean(lock.kaut ?? lock.atlas);
+  return lock;
+}
+
 export async function verify(ws: string, { json = false, source = false }: { json?: boolean; source?: boolean } = {}): Promise<boolean> {
   // Legacy fallback: pre-rename workspaces carry federation.lock until their first
   // recompile — verify must still judge them.
   const raw = await readIfExists(path.join(ws, 'taut.lock'), 8 * 1024 * 1024)
     ?? await readIfExists(path.join(ws, 'federation.lock'), 8 * 1024 * 1024);
   if (raw === null) fail(`no taut.lock in ${ws} — not a TAUT workspace (or setup never ran)`);
-  const lock: Lock = JSON.parse(raw);
+  const lock: Lock = normalizeLock(JSON.parse(raw));
   const rows: { id: string; state: string }[] = [];
   for (const a of lock.artifacts) {
     const target = path.join(ws, a.id);
@@ -108,11 +117,11 @@ export async function verify(ws: string, { json = false, source = false }: { jso
         // pass to the pinned source; the gate values are reconstructed from the lock
         // itself (must mirror capabilityGates in lib/install.mts).
         if (a.transform) {
-          const gates = {
-            atlas: Boolean(lock.atlas),
+          const gates = withLegacyGates({
+            kaut: lock.kaut,
             'mcp-docs': (lock.mcp ?? []).some((m) => m.role === 'docs'),
             ...Object.fromEntries((lock.stacks ?? []).map((s) => [`stack-${s}`, true])),
-          };
+          });
           atPin = Buffer.from(applyMarkers(atPin.toString('utf8'), gates, a.source!));
         }
         let actual: string | null = null;

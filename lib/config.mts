@@ -11,7 +11,7 @@ import {
 import { TELEMETRY_LEVELS } from '../gate/telemetry.mjs';
 import { bold, dim, exists, expandHome, fail, green, readIfExists, yellow } from './util.mts';
 import { chatChoice } from './manifest.mts';
-import { atlasRequired, lintRepoBindings, loadCatalog, stageChain } from './artifacts.mts';
+import { kautRequired, lintRepoBindings, loadCatalog, stageChain } from './artifacts.mts';
 import { askText, tuiSelect } from './tui.mts';
 import type { Cfg, Profile, Repo } from './types.mts';
 
@@ -105,13 +105,14 @@ export async function scanRepos(root: string, excludeAbs: string[] = []): Promis
 
 // ---------------------------------------------------------------- config gathering
 
-// The Atlas engine folder an ENABLED integration must carry: resolved absolute, and it
-// must actually hold the engine (atlas.mjs) — a wrong path fails setup rather than
-// compiling a workspace whose instructions point at nothing.
-async function resolveAtlasRoot(dir: unknown): Promise<string> {
+// The KAUT engine folder an ENABLED integration must carry: resolved absolute, and it
+// must actually hold the engine — a wrong path fails setup rather than compiling a
+// workspace whose instructions point at nothing. The engine CLI is kaut.mjs; a legacy
+// engine checkout still shipping atlas.mjs (pre-rename) is accepted the same.
+async function resolveKautRoot(dir: unknown): Promise<string> {
   const root = path.resolve(expandHome(String(dir)));
-  if (!(await exists(path.join(root, 'atlas.mjs'))))
-    fail(`Atlas folder not usable: ${root} — expected the Atlas engine there (atlas.mjs); point at the engine checkout`);
+  if (!(await exists(path.join(root, 'kaut.mjs'))) && !(await exists(path.join(root, 'atlas.mjs'))))
+    fail(`KAUT folder not usable: ${root} — expected the KAUT engine there (kaut.mjs, or legacy atlas.mjs); point at the engine checkout`);
   return root;
 }
 
@@ -144,6 +145,9 @@ export function relintRepoBindings(cfg: Cfg): void {
 }
 
 export async function gatherConfig(answers: any, interactive: boolean): Promise<Cfg> {
+  // Rename normalization (Atlas → KAUT): a legacy answers file may still say `atlas` —
+  // folded into the canonical `kaut` key ONCE here, at the answers parse boundary.
+  if (answers.kaut === undefined && answers.atlas !== undefined) answers.kaut = answers.atlas;
   const deployments = await listDeployments();
   // Filled step by step below, exactly in questionnaire order — typed as the final
   // shape (every required field is assigned before return; the checker cannot follow
@@ -297,31 +301,32 @@ export async function gatherConfig(answers: any, interactive: boolean): Promise<
     ], { summary: (v) => v.join(' + ') });
   }
 
-  // Atlas — DISABLED by default; enabling is the explicit opt-in and ALWAYS carries the
+  // KAUT — DISABLED by default; enabling is the explicit opt-in and ALWAYS carries the
   // engine folder: enabled-without-location aborts setup (a workspace must never claim
-  // an integration it cannot reach). Most users have never heard of Atlas — the
-  // preselected "disable" hint says exactly that. Answers: a missing `atlas` key means
+  // an integration it cannot reach). Most users have never heard of KAUT — the
+  // preselected "disable" hint says exactly that. Answers: a missing `kaut` key means
   // false instead of failing the non-interactive run; the ENABLING VALUE IS THE FOLDER
-  // (`atlas: "<dir>"`); a bare `atlas: true` names no folder and fails.
-  if (answers.atlas !== undefined) {
+  // (`kaut: "<dir>"`); a bare `kaut: true` names no folder and fails. The legacy
+  // `atlas` answers key was normalized into `kaut` at the top of gatherConfig.
+  if (answers.kaut !== undefined) {
     stepNo += 1;
-    if (typeof answers.atlas === 'string' && answers.atlas.trim() !== '') {
-      cfg.atlas = true;
-      cfg.atlasRoot = await resolveAtlasRoot(answers.atlas);
-    } else if (answers.atlas) {
-      fail('answers: enabling Atlas requires its folder — set `atlas` to the Atlas engine directory (or omit it / set false to disable)');
-    } else { cfg.atlas = false; cfg.atlasRoot = null; }
-  } else if (!interactive) { cfg.atlas = false; cfg.atlasRoot = null; }
+    if (typeof answers.kaut === 'string' && answers.kaut.trim() !== '') {
+      cfg.kaut = true;
+      cfg.kautRoot = await resolveKautRoot(answers.kaut);
+    } else if (answers.kaut) {
+      fail('answers: enabling KAUT requires its folder — set `kaut` to the KAUT engine directory (or omit it / set false to disable)');
+    } else { cfg.kaut = false; cfg.kautRoot = null; }
+  } else if (!interactive) { cfg.kaut = false; cfg.kautRoot = null; }
   else {
-    cfg.atlas = await tuiSelect(step('Atlas integration'), [
-      { label: 'disable', value: false, hint: 'default — if you do not know what Atlas is, pick this; Atlas-dependent skills are excluded' },
+    cfg.kaut = await tuiSelect(step('KAUT integration'), [
+      { label: 'disable', value: false, hint: 'default — if you do not know what KAUT is, pick this; KAUT-dependent skills are excluded' },
       { label: 'enable', value: true, hint: 'source-anchored knowledge engine; asks for its folder next (required)' },
     ], { summary: (v) => (v ? 'enabled' : 'disabled') });
-    if (cfg.atlas) {
-      const dir = (await askText('Atlas folder (where the Atlas engine lives; empty aborts setup)')).trim();
-      if (!dir) fail('Atlas enabled but no folder given — setup aborted; re-run and pick "disable" if you do not use Atlas');
-      cfg.atlasRoot = await resolveAtlasRoot(dir);
-    } else cfg.atlasRoot = null;
+    if (cfg.kaut) {
+      const dir = (await askText('KAUT folder (where the KAUT engine lives; empty aborts setup)')).trim();
+      if (!dir) fail('KAUT enabled but no folder given — setup aborted; re-run and pick "disable" if you do not use KAUT');
+      cfg.kautRoot = await resolveKautRoot(dir);
+    } else cfg.kautRoot = null;
   }
 
   // Workspace MODE: strict = only the compiled toolchain
@@ -393,28 +398,28 @@ export async function gatherConfig(answers: any, interactive: boolean): Promise<
   }
 
   // Skills — a flat checklist over the whole catalog (framework + the deployment's own
-  // payload). The pool is narrowed by capability (`requires: [atlas]` without Atlas) and
+  // payload). The pool is narrowed by capability (`requires: [kaut]` without KAUT) and
   // by the repo lint; flow docs only supply ordering hints.
   const availableSkills = [...cfg.catalog.skills.keys()].sort();
-  const atlasReq = atlasRequired(cfg.catalog);
+  const kautReq = kautRequired(cfg.catalog);
   const chain = stageChain(cfg.catalog);
   const selectable = availableSkills
-    .filter((s) => (cfg.atlas || !atlasReq.includes(s)) && !repoExcludedSkills.has(s));
+    .filter((s) => (cfg.kaut || !kautReq.includes(s)) && !repoExcludedSkills.has(s));
   if (answers.skills !== undefined) {
     let requested: string | string[] = answers.skills === 'all' ? availableSkills : answers.skills;
     if (typeof requested === 'string') requested = requested.split(',').map((s) => s.trim()).filter(Boolean);
     for (const s of requested) if (!availableSkills.includes(s)) fail(`unknown skill "${s}"`);
-    if (!cfg.atlas) {
-      const dropped = requested.filter((s) => atlasReq.includes(s));
-      if (dropped.length) warnings.push(`Atlas disabled → skipping Atlas-dependent skills: ${dropped.join(', ')}`);
+    if (!cfg.kaut) {
+      const dropped = requested.filter((s) => kautReq.includes(s));
+      if (dropped.length) warnings.push(`KAUT disabled → skipping KAUT-dependent skills: ${dropped.join(', ')}`);
     }
     cfg.skills = requested.filter((s) => selectable.includes(s));
     stepNo += 1;
   } else if (!interactive) {
     need('skills');
   } else {
-    if (!cfg.atlas && atlasReq.length)
-      process.stdout.write(dim(`  Atlas disabled → not offered: ${atlasReq.join(', ')}`) + '\n');
+    if (!cfg.kaut && kautReq.length)
+      process.stdout.write(dim(`  KAUT disabled → not offered: ${kautReq.join(', ')}`) + '\n');
     cfg.skills = await tuiSelect(step('Skills to install'), selectable.map((s) => ({
       label: s,
       value: s,
@@ -516,8 +521,10 @@ export async function cfgFromWorkspace(ws: string): Promise<Cfg> {
     profile,
     catalog,
     harnesses: normalizeHarnesses(manifest.harnesses ?? manifest.harness), // scalar = legacy manifest
-    atlas: Boolean(manifest.atlas?.enabled),
-    atlasRoot: local.atlasRoot ?? null, // machine binding; legacy workspaces have none
+    // Rename normalization (Atlas → KAUT): a pre-rename manifest/local.json carries the
+    // legacy keys until its first recompile migrates them — folded in here, at the load.
+    kaut: Boolean(manifest.kaut?.enabled ?? manifest.atlas?.enabled),
+    kautRoot: local.kautRoot ?? local.atlasRoot ?? null, // machine binding; legacy workspaces have none
     mode: manifest.mode ?? 'normal',
     // Pre-telemetry manifests have no key — they adopt the default (extended); the
     // surfaced migration note lives in compileWorkspace, next to the old lock.

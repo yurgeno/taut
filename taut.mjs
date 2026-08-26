@@ -104,7 +104,7 @@ judge BOTH axes.
 setup   Compile a workspace from the FLAT ARTIFACT MODEL (no flow entity). The core
         (this CLI) does distribution, actualization and integrity over SIX element kinds:
           - skills/<name>/SKILL.md — each declares its own wiring in frontmatter
-            metadata.taut: {agents, requires: [atlas], repos, role; mcp: [roles]
+            metadata.taut: {agents, requires: [kaut], repos, role; mcp: [roles]
             is documentary — the docs gate follows the INSTALLED servers}
           - agents/<name>.md — installed only when a selected skill names them
           - MCP servers — catalog/mcp.json (role, package pin, env, usage note)
@@ -138,11 +138,12 @@ setup   Compile a workspace from the FLAT ARTIFACT MODEL (no flow entity). The c
         scan mode. Never writes into member repos.
         Non-interactive: --yes with full --answers (deployment: <name> | "none" — the
         explicit service escape; repos: path list or "scan"; harnesses: any subset of
-        the supported set ["claude-code","codex"] (legacy scalar "harness" accepted); atlas: the
-        Atlas engine folder to integrate — the value IS the location, recorded in
+        the supported set ["claude-code","codex"] (legacy scalar "harness" accepted); kaut: the
+        KAUT engine folder to integrate (the legacy "atlas" answers key is still
+        accepted) — the value IS the location, recorded in
         .taut/local.json and rendered into the instructions; omitted/false = DISABLED,
-        the default (leave it out if you do not know what Atlas is), and a bare true
-        fails: an enabled Atlas always carries its folder; chatLanguage: the session
+        the default (leave it out if you do not know what KAUT is), and a bare true
+        fails: an enabled KAUT always carries its folder; chatLanguage: the session
         language code — accepted ONLY when the deployment declares a choice via
         defaults.languages.chat = {options[], default}; without the key the declared
         default applies, and a deployment with a FLAT chat value asks nothing and
@@ -155,14 +156,14 @@ check   READINESS check (status answers "am I current?", check answers "can prac
         work run HERE, NOW?"): artifact integrity, a LIVE gate self-test (managed skill
         allowed; in strict a foreign probe must be denied), every member repo reachable
         + git-readable (branch/dirty reported), every shipped data file readable
-        (runbooks, repo descriptors, laws, flow docs), memory writable, the Atlas
-        engine binding when Atlas is enabled (atlasRoot still points at an engine;
+        (runbooks, repo descriptors, laws, flow docs), memory writable, the KAUT
+        engine binding when KAUT is enabled (kautRoot still points at an engine;
         live store proofs stay with the check skill), and a REAL MCP
         handshake (JSON-RPC initialize over stdio, env resolved from .taut/local.env)
         against every allowed server. Works without the framework/pack repos present —
         a pure workspace self-test. Exit 0 = READY. The panel's "Check" button runs
         this; the deployment's check skill runs it first, then adds the agent-side
-        proofs (live MCP tool calls, Atlas lookups) that only a session can perform.
+        proofs (live MCP tool calls, KAUT lookups) that only a session can perform.
 verify  Re-hash installed artifacts against taut.lock (exit 1 on drift). --source
         additionally re-derives copy artifacts from the PINNED framework commit (catches
         lock tampering).

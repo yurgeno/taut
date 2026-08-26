@@ -26,8 +26,10 @@ the wiring block the compiler consumes:
 metadata:
   taut:
     agents: [fx-analyst]      # subagents this skill launches → they get installed
-    requires: [atlas]         # capability requirements; unmet → skill not offered
-                              # (`atlas` is the only capability the engine gates on today)
+    requires: [kaut]          # capability requirements; unmet → skill not offered
+                              # (`kaut` — the KAUT knowledge-engine integration, formerly
+                              # Atlas; legacy `atlas` keys/markers still accepted — is the
+                              # only capability the engine gates on today)
     mcp: [docs]               # documentary: the MCP roles this skill uses. NOT wiring —
                               # the mcp-docs gate follows the servers actually installed
     repos: [repo-core]        # repo bindings → repo-map lint (see §7)
@@ -56,13 +58,14 @@ one branch per gate, so a workspace never receives instructions (or tool allowli
 for a capability it does not have:
 
 ```
-<!-- atlas:on -->        …lines kept when the capability is ON…
-<!-- atlas:off -->       …optional OFF branch…
-<!-- atlas:end -->
+<!-- kaut:on -->         …lines kept when the capability is ON…
+<!-- kaut:off -->        …optional OFF branch…
+<!-- kaut:end -->
 ```
 
 `# key:on` / `# key:off` / `# key:end` work inside YAML frontmatter. Known
-CAPABILITY keys: `atlas` (the Atlas integration answer) and `mcp-docs` (a docs-role MCP
+CAPABILITY keys: `kaut` (the KAUT integration answer; the legacy marker key `atlas`
+is an alias of the same gate) and `mcp-docs` (a docs-role MCP
 server is installed) — unknown capability keys FAIL the compile.
 
 **Stack keys — `stack-<toolchain>` — are an OPEN vocabulary.** The compiler resolves
@@ -144,7 +147,7 @@ Everything under `manifest` lands in the generated workspace `manifest.json` unc
 read the manifest, never the pack). Two mechanics to know:
 
 - **Compiler-owned keys are protected.** `name, framework, deployment, description,
-  harness(es), atlas, mode, flow, flows, flowDocs, runbooks, repoDocs, skills,
+  harness(es), kaut, atlas, mode, flow, flows, flowDocs, runbooks, repoDocs, skills,
   skillsSelection, skillsExcluded, agents, mcp, repos, laws` are computed by the engine;
   a config supplying them gets a warning and the value is ignored. `flow` is the single
   exception: your flow values MERGE around the computed `flow.stages` — silently, no

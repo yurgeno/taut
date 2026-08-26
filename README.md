@@ -91,7 +91,7 @@ edited around the pipeline.
 - **Strict mode.** Optionally, only the compiled toolchain runs: foreign skills,
   workspace-file-backed agents and unlisted MCP servers are denied at invocation
   (harness built-ins stay untouched).
-- **Capability markers.** Sources carry conditional branches (`<!-- atlas:on -->` …)
+- **Capability markers.** Sources carry conditional branches (`<!-- kaut:on -->` …)
   compiled per workspace, so a workspace never receives directives — or tool
   allowlists — for capabilities it does not have.
 - **Acting panel.** `node ui` opens a loopback web panel: status badges, harness
@@ -137,7 +137,8 @@ so give a workspace path inside the folder that holds your repos; the folder is 
 if it does not exist.
 
 Setup then asks (in order): data pack, deployment, workspace folder, member repos,
-harness(es), Atlas (say `disable` unless you know what it is), mode, skills, MCP servers
+harness(es), KAUT (formerly Atlas; legacy `atlas` keys/markers still accepted — say
+`disable` unless you know what it is), mode, skills, MCP servers
 — and compiles. Open the compiled workspace folder with your harness and work; from that
 folder:
 

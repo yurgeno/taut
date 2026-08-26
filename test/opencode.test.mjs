@@ -22,7 +22,7 @@ after(reset);
 
 test('opencode setup: native set installs; skills tree is SHARED with codex (single lock row)', async () => {
   const { ws } = await setup('triple', {
-    harnesses: ['claude-code', 'codex', 'opencode'], atlas: false, skills: 'all', mcp: ['jira'], repos: [repoB],
+    harnesses: ['claude-code', 'codex', 'opencode'], kaut: false, skills: 'all', mcp: ['jira'], repos: [repoB],
   });
 
   // opencode set
@@ -58,7 +58,7 @@ test('opencode setup: native set installs; skills tree is SHARED with codex (sin
 
 test('gate, opencode identity: lowercase native tools route to the shared/own trees', async () => {
   const { ws } = await setup('gate', {
-    harnesses: ['claude-code', 'opencode'], atlas: false, skills: 'all', mcp: ['jira'], repos: [repoB],
+    harnesses: ['claude-code', 'opencode'], kaut: false, skills: 'all', mcp: ['jira'], repos: [repoB],
   });
 
   // opencode invokes skills through its native lowercase `skill` tool with {name}
@@ -81,7 +81,7 @@ test('gate, opencode identity: lowercase native tools route to the shared/own tr
 
 test('strict mode: opencode.json carries the native skill allowlist; gate denies foreign artifacts; serverKey-prefixed MCP tools are recognized', async () => {
   const { ws } = await setup('strict', {
-    harnesses: ['opencode'], atlas: false, skills: 'all', mcp: ['jira'], repos: [repoB], mode: 'strict',
+    harnesses: ['opencode'], kaut: false, skills: 'all', mcp: ['jira'], repos: [repoB], mode: 'strict',
   });
 
   const oc = JSON.parse(await fs.readFile(path.join(ws, 'opencode.json'), 'utf8'));
@@ -103,7 +103,7 @@ test('strict mode: opencode.json carries the native skill allowlist; gate denies
 
 test('toggle OFF sweeps the opencode set; codex keeps the shared skills tree and AGENTS.md', async () => {
   const { ws } = await setup('toggle', {
-    harnesses: ['codex', 'opencode'], atlas: false, skills: 'all', mcp: [], repos: [repoB],
+    harnesses: ['codex', 'opencode'], kaut: false, skills: 'all', mcp: [], repos: [repoB],
   });
   assert.ok(await exists(path.join(ws, 'opencode.json')));
 
@@ -125,7 +125,7 @@ test('toggle OFF sweeps the opencode set; codex keeps the shared skills tree and
 
 test('plugin artifact is CORE for the gate: tampering it blocks managed invocations', async () => {
   const { ws } = await setup('plugcore', {
-    harnesses: ['opencode'], atlas: false, skills: 'all', mcp: [], repos: [repoB],
+    harnesses: ['opencode'], kaut: false, skills: 'all', mcp: [], repos: [repoB],
   });
   await fs.appendFile(path.join(ws, '.opencode', 'plugins', 'taut-gate.js'), '\n// tamper\n');
   const r = await runGate(ws, 'pretooluse', { tool_name: 'skill', tool_input: { name: 'fx-plan' } }, ['--harness', 'opencode']);

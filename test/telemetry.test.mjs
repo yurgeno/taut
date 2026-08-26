@@ -78,7 +78,7 @@ test('adapter: daily file, meta first, level filtering, never throws', async () 
 
 test('setup: telemetry answer lands in lock + manifest; default is extended; bad value fails', async () => {
   const { ws, stdout } = await setup('tel-basic', {
-    harness: 'claude-code', atlas: false, skills: 'all', mcp: [], repos: [repoB], telemetry: 'basic',
+    harness: 'claude-code', kaut: false, skills: 'all', mcp: [], repos: [repoB], telemetry: 'basic',
   });
   assert.match(stdout, /telemetry basic/);
   assert.match(stdout, /never sent anywhere/);
@@ -89,20 +89,20 @@ test('setup: telemetry answer lands in lock + manifest; default is extended; bad
   assert.ok(lock.artifacts.some((a) => a.id === '.taut/telemetry.mjs'), 'the adapter ships as a locked artifact');
 
   const { ws: ws2 } = await setup('tel-default', {
-    harness: 'claude-code', atlas: false, skills: 'all', mcp: [], repos: [repoB],
+    harness: 'claude-code', kaut: false, skills: 'all', mcp: [], repos: [repoB],
   });
   const lock2 = JSON.parse(await fs.readFile(path.join(ws2, 'taut.lock'), 'utf8'));
   assert.equal(lock2.telemetry, 'extended', 'non-interactive default is extended');
 
   await assert.rejects(
-    setup('tel-bad', { harness: 'claude-code', atlas: false, skills: 'all', mcp: [], repos: [repoB], telemetry: 'verbose' }),
+    setup('tel-bad', { harness: 'claude-code', kaut: false, skills: 'all', mcp: [], repos: [repoB], telemetry: 'verbose' }),
     (e) => /unknown telemetry level "verbose"/.test(e.stderr ?? `${e}`),
   );
 });
 
 test('gate per level: basic logs denials but not allows; extended logs both; session_start carries behind', async () => {
   const { ws } = await setup('tel-gate', {
-    harness: 'claude-code', atlas: false, skills: 'all', mcp: [], repos: [repoB], telemetry: 'basic',
+    harness: 'claude-code', kaut: false, skills: 'all', mcp: [], repos: [repoB], telemetry: 'basic',
   });
   await runGate(ws, 'pretooluse', { tool_name: 'Skill', tool_input: { skill: 'fx-plan' }, session_id: 'sb' });
   await fs.appendFile(path.join(ws, '.claude', 'skills', 'fx-plan', 'SKILL.md'), '\nhack\n');
@@ -135,7 +135,7 @@ test('gate per level: basic logs denials but not allows; extended logs both; ses
 
 test('legacy workspace: a pre-telemetry lock adopts the default on update, surfaced', async () => {
   const { ws } = await setup('tel-legacy', {
-    harness: 'claude-code', atlas: false, skills: 'all', mcp: [], repos: [repoB],
+    harness: 'claude-code', kaut: false, skills: 'all', mcp: [], repos: [repoB],
   });
   const lockPath = path.join(ws, 'taut.lock');
   const lock = JSON.parse(await fs.readFile(lockPath, 'utf8'));
@@ -150,7 +150,7 @@ test('legacy workspace: a pre-telemetry lock adopts the default on update, surfa
 
 test('report: aggregates daily files, honors --since, prints the privacy note; --json is machine-readable', async () => {
   const { ws } = await setup('tel-report', {
-    harness: 'claude-code', atlas: false, skills: 'all', mcp: [], repos: [repoB],
+    harness: 'claude-code', kaut: false, skills: 'all', mcp: [], repos: [repoB],
   });
   await runGate(ws, 'pretooluse', { tool_name: 'Skill', tool_input: { skill: 'fx-plan' }, session_id: 'r1' });
   await runGate(ws, 'sessionstart', { session_id: 'r1' });

@@ -9,8 +9,10 @@
 //   <!-- <key>:end --> / # <key>:end   closes the block
 // The HTML form keeps markdown BODIES valid; the '#' form works inside YAML frontmatter
 // (duplicate-key variants never reach a YAML parser — sources are only consumed through
-// this pass). Known keys today: `atlas` (Atlas integration), `mcp-docs` (a docs-role MCP
-// server is installed) — the gate values come from the setup config / the lock.
+// this pass). Known keys today: `kaut` (KAUT knowledge-engine integration; the legacy
+// marker key `atlas` is an ALIAS of the same gate — pre-rename pack sources keep
+// compiling), `mcp-docs` (a docs-role MCP server is installed) — the gate values come
+// from the setup config / the lock.
 // STACK keys (`stack-<toolchain>`, lib/stacks.mts) are an OPEN vocabulary: a key absent
 // from the gates reads as OFF (the branch compiles out) instead of failing — a pack may
 // legitimately carry branches for stacks a given workspace does not have. Capability
@@ -18,6 +20,13 @@
 // capability-key markers throw — the compile fails rather than shipping a half-gated
 // artifact (lint).
 const MARKER = /^(?:<!-- ([a-z][a-z0-9-]*):(on|off|end) -->|# ([a-z][a-z0-9-]*):(on|off|end))$/;
+
+// Rename compatibility (Atlas → KAUT): every gate-set PRODUCER (capabilityGates, the
+// lock reconstruction in verify, the catalog's both-extremes parse) runs its gates
+// through this, so a pack source still carrying the legacy `atlas` marker key gates on
+// the SAME capability as `kaut` — the marker pass itself stays alias-free.
+export const withLegacyGates = (gates: Record<string, boolean>): Record<string, boolean> =>
+  'kaut' in gates ? { atlas: gates.kaut, ...gates } : gates;
 
 export function applyMarkers(text: string, gates: Record<string, boolean>, id = 'artifact'): string {
   const out: string[] = [];

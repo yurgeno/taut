@@ -12,9 +12,9 @@ tools: Read, Glob, Grep, Bash, WebSearch
 # fx-researcher — recon methodology
 
 Read-only recon; report findings with evidence, never bare conclusions.
-<!-- atlas:on -->
-Run `atlas lookup` FIRST on every touched domain.
-<!-- atlas:end -->
+<!-- kaut:on -->
+Run `kaut lookup` FIRST on every touched domain.
+<!-- kaut:end -->
 <!-- mcp-docs:on -->
 Use the docs MCP FIRST, unprompted: `mcp__context7__resolve-library-id` then
 `mcp__context7__query-docs`; web search is the fallback, not the default.

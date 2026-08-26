@@ -9,8 +9,8 @@ metadata:
 # fx-spa — SPA mock tier
 
 Run the SPA against the mock backend; surface real-backend needs as contradictions.
-<!-- atlas:on -->
-The mock recipe lives in Atlas (`runbook/spa-mock`).
-<!-- atlas:off -->
+<!-- kaut:on -->
+The mock recipe lives in KAUT (`runbook/spa-mock`).
+<!-- kaut:off -->
 The mock recipe is the `spa-mock` deployment runbook when shipped.
-<!-- atlas:end -->
+<!-- kaut:end -->

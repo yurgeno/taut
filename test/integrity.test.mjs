@@ -19,7 +19,7 @@ after(reset);
 
 test('verify: clean after setup, detects tamper, exit code 1', async () => {
   const { ws } = await setup('cc-verify', {
-    harness: 'claude-code', atlas: false, skills: 'all', mcp: 'all', repos: [repoB],
+    harness: 'claude-code', kaut: false, skills: 'all', mcp: 'all', repos: [repoB],
   });
   await run(process.execPath, [CLI, 'verify', '--workspace', ws]); // exit 0 or throws
 
@@ -33,7 +33,7 @@ test('verify: clean after setup, detects tamper, exit code 1', async () => {
 
 test('gate: PreToolUse allows clean managed artifacts, blocks tampered, ignores unmanaged', async () => {
   const { ws } = await setup('gate-basic', {
-    harness: 'claude-code', atlas: false, skills: 'all', mcp: [], repos: [repoB],
+    harness: 'claude-code', kaut: false, skills: 'all', mcp: [], repos: [repoB],
   });
   const settings = JSON.parse(await fs.readFile(path.join(ws, '.claude', 'settings.json'), 'utf8'));
   assert.equal(settings.hooks.PreToolUse[0].matcher, 'Skill|Agent|Task');
@@ -73,7 +73,7 @@ test('gate: PreToolUse allows clean managed artifacts, blocks tampered, ignores 
 
 test('gate: core drift blocks prompts and all managed invocations; sessionstart reports', async () => {
   const { ws } = await setup('gate-core', {
-    harness: 'claude-code', atlas: false, skills: 'all', mcp: [], repos: [repoB],
+    harness: 'claude-code', kaut: false, skills: 'all', mcp: [], repos: [repoB],
   });
   let r = await runGate(ws, 'promptsubmit', {});
   assert.equal(r.code, 0); assert.equal(r.stdout, '');
@@ -97,7 +97,7 @@ test('gate: core drift blocks prompts and all managed invocations; sessionstart 
 
 test('gate: missing lock fails closed', async () => {
   const { ws } = await setup('gate-nolock', {
-    harness: 'claude-code', atlas: false, skills: 'all', mcp: [], repos: [repoB],
+    harness: 'claude-code', kaut: false, skills: 'all', mcp: [], repos: [repoB],
   });
   await fs.rm(path.join(ws, 'taut.lock'));
   const r = await runGate(ws, 'pretooluse', { tool_name: 'Skill', tool_input: { skill: 'fx-plan' } });
@@ -108,7 +108,7 @@ test('gate: missing lock fails closed', async () => {
 
 test('repair: rebuilds from manifest (no answers file) and heals the gate', async () => {
   const { ws } = await setup('repair2', {
-    harness: 'claude-code', atlas: false, skills: 'all', mcp: ['jira'], repos: [repoB],
+    harness: 'claude-code', kaut: false, skills: 'all', mcp: ['jira'], repos: [repoB],
   });
   await fs.appendFile(path.join(ws, '.claude', 'skills', 'fx-plan', 'SKILL.md'), '\ndrift\n');
   await fs.appendFile(path.join(ws, 'CLAUDE.md'), '\ndrift\n');
@@ -121,7 +121,7 @@ test('repair: rebuilds from manifest (no answers file) and heals the gate', asyn
 
 test('verify --source catches artifact+lock co-tamper', async () => {
   const { ws } = await setup('cotamper', {
-    harness: 'claude-code', atlas: false, skills: 'all', mcp: [], repos: [repoB],
+    harness: 'claude-code', kaut: false, skills: 'all', mcp: [], repos: [repoB],
   });
   const target = path.join(ws, '.claude', 'skills', 'fx-plan', 'SKILL.md');
   await fs.appendFile(target, '\nhack\n');
@@ -141,7 +141,7 @@ test('verify --source catches artifact+lock co-tamper', async () => {
 
 test('laws: canonical text ships into the workspace as core; tamper blocks invocations', async () => {
   const { ws } = await setup('laws', {
-    harness: 'claude-code', atlas: false, skills: 'all', mcp: [], repos: [repoB],
+    harness: 'claude-code', kaut: false, skills: 'all', mcp: [], repos: [repoB],
   });
   const manifest = JSON.parse(await fs.readFile(path.join(ws, 'manifest.json'), 'utf8'));
   assert.equal(manifest.laws.text, '.taut/LAWS.md', 'manifest points at the SHIPPED copy, workspace-relative');
@@ -163,7 +163,7 @@ test('laws: canonical text ships into the workspace as core; tamper blocks invoc
 
 test('strict mode: only the compiled toolchain runs — foreign skills/agents/MCP denied; normal untouched', async () => {
   const { ws } = await setup('strict-ws', {
-    harness: 'claude-code', atlas: false, skills: 'all', mcp: ['context7'], repos: [repoB],
+    harness: 'claude-code', kaut: false, skills: 'all', mcp: ['context7'], repos: [repoB],
     mode: 'strict',
   });
   const manifest = JSON.parse(await fs.readFile(path.join(ws, 'manifest.json'), 'utf8'));
@@ -233,7 +233,7 @@ test('mode: deployment config dictates strict; --from-deployment adopts a later 
   const ws = path.join(TMP, 'ws', 'mode-dep');
   const answersFile = path.join(TMP, 'mode-dep.answers.json');
   await fs.writeFile(answersFile, JSON.stringify({
-    deployment: 'strictdep', harness: 'claude-code', atlas: false, skills: 'all', mcp: [],
+    deployment: 'strictdep', harness: 'claude-code', kaut: false, skills: 'all', mcp: [],
     workspace: ws, repos: [repoB],
   }));
   const env = { env: { ...process.env, TAUT_DATA: packRoot } };
@@ -245,7 +245,7 @@ test('mode: deployment config dictates strict; --from-deployment adopts a later 
   // only on the deliberate factory refresh.
   const ws2 = path.join(TMP, 'ws', 'mode-dep2');
   await fs.writeFile(answersFile, JSON.stringify({
-    deployment: 'strictdep', harness: 'claude-code', atlas: false, skills: 'all', mcp: [],
+    deployment: 'strictdep', harness: 'claude-code', kaut: false, skills: 'all', mcp: [],
     workspace: ws2, repos: [repoB], mode: 'normal',
   }));
   await run(process.execPath, [CLI, 'setup', '--answers', answersFile, '--yes'], env);

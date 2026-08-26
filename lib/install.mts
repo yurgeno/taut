@@ -9,7 +9,7 @@ import type { Stats } from 'node:fs';
 import { ENV_HELP, FW_ROOT, HARNESSES, MCP_CATALOG, requireData } from './constants.mts';
 import { exists, fail, readIfExists, sha256 } from './util.mts';
 import { neededAgents } from './artifacts.mts';
-import { applyMarkers } from './markers.mts';
+import { applyMarkers, withLegacyGates } from './markers.mts';
 import { buildManifest, installedFlowDocs } from './manifest.mts';
 import { resolveRepoStacks } from './stacks.mts';
 import {
@@ -116,7 +116,7 @@ async function copyArtifact(list: ArtifactRow[], ws: string, rel: string, source
 
 // Skills + agent sources pass through the capability-marker gate: a workspace must not
 // receive a directive (or a tool allowlist entry) for a capability it does not have —
-// atlas-off workspaces would otherwise keep doing lookups/distillation, and a
+// kaut-off workspaces would otherwise keep doing lookups/distillation, and a
 // docs-MCP-less workspace must not name context7 tools. The lock entry records
 // `transform: 'gates'`; `verify --source` re-applies the same pass at the pinned commit
 // (gate values reconstructed from the lock itself).
@@ -139,11 +139,11 @@ async function copyGated(list: ArtifactRow[], ws: string, rel: string, sourceAbs
 // connected repos); the vocabulary is OPEN — a `stack-*` key absent here reads as OFF
 // in the marker pass instead of failing (lib/markers.mts).
 export function capabilityGates(cfg: Cfg): Record<string, boolean> {
-  return {
-    atlas: Boolean(cfg.atlas),
+  return withLegacyGates({
+    kaut: Boolean(cfg.kaut),
     'mcp-docs': cfg.mcp.some((id) => MCP_CATALOG[id].role === 'docs'),
     ...Object.fromEntries((cfg.stacks ?? []).map((s) => [`stack-${s}`, true])),
-  };
+  });
 }
 
 export async function install(cfg: Cfg): Promise<ArtifactRow[]> {
@@ -178,7 +178,7 @@ export async function install(cfg: Cfg): Promise<ArtifactRow[]> {
       (cfg.warnings ??= []).push(`runtimeTiers tier "${rung.tier}": runbook "${rung.runbook}" excluded by the repo lint — the tier is not runnable in this workspace`);
 
   // Per-profile stack wrappers (the deployment must bring up its
-  // stacks with or without Atlas): one GENERATED `up-<profile>` skill per entry in the
+  // stacks with or without KAUT): one GENERATED `up-<profile>` skill per entry in the
   // deployment config's stacks — project-dependent values, generic mechanism. The engine
   // they delegate to is the installed skill declaring `metadata.taut.role: stack-engine`
   // (core carries no content names — core/data split). A stack whose runbook the repo

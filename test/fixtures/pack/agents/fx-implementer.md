@@ -12,9 +12,9 @@ tools: Read, Edit, Write, Glob, Grep, Bash
 # fx-implementer — implementation discipline
 
 One repo, one plan section; edits stay in the working tree; produce a patch artifact.
-<!-- atlas:on -->
-Check `atlas lookup` for repo knowledge before structural changes.
-<!-- atlas:end -->
+<!-- kaut:on -->
+Check `kaut lookup` for repo knowledge before structural changes.
+<!-- kaut:end -->
 <!-- mcp-docs:on -->
 When a library API is unclear, consult current docs UNPROMPTED (`mcp__context7__query-docs`).
 <!-- mcp-docs:off -->

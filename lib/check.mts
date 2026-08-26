@@ -5,7 +5,7 @@
 // repo reachable and git-readable, every shipped data file (runbooks, repo descriptors,
 // laws, flow docs) readable, memory writable, and a real MCP HANDSHAKE (JSON-RPC
 // initialize over stdio) against every server the workspace allows. The agent-side
-// twin is the pack's check skill (live MCP tool calls, Atlas lookups, in-session
+// twin is the pack's check skill (live MCP tool calls, KAUT lookups, in-session
 // proofs) — it starts by running this command. Panel button "Check" runs this too.
 // Works WITHOUT the framework/pack repos present — a pure workspace self-test.
 import { execFile, execSync, spawn } from 'node:child_process';
@@ -16,6 +16,7 @@ import type { ChildProcess, ExecSyncOptionsWithStringEncoding } from 'node:child
 
 import { bold, dim, exists, expandHome, fail, green, red, readIfExists, safeJoin, sha256, yellow } from './util.mts';
 import { createTelemetry } from '../gate/telemetry.mjs';
+import { normalizeLock } from './lock.mts';
 import type { CliOpts, Lock } from './types.mts';
 
 const MCP_HANDSHAKE_TIMEOUT = 30_000; // npx cold-start may download the package
@@ -82,6 +83,7 @@ export async function cmdCheck(opts: CliOpts): Promise<void> {
 
   const lock: Lock | null | undefined = await readJson(path.join(ws, 'taut.lock'));
   if (!lock) fail(`no readable taut.lock in ${ws} — not a TAUT workspace (or setup never ran)`);
+  normalizeLock(lock); // legacy `atlas` key folds into `kaut` at the load
   const manifest = await readJson(path.join(ws, 'manifest.json'));
   const local = await readJson(path.join(ws, '.taut', 'local.json'));
   add('config', manifest && local ? 'ok' : 'fail',
@@ -170,15 +172,17 @@ export async function cmdCheck(opts: CliOpts): Promise<void> {
     add('memory', linked ? 'ok' : 'warn', linked ? `writable · ${memRoot}` : `root writable but workspace memory/ link missing — run \`taut repair\``);
   } catch { add('memory', 'fail', `memory root not writable: ${local?.memoryRoot ?? '(unknown)'}`); }
 
-  // Atlas (when enabled): the MACHINE half only — the recorded engine location still
+  // KAUT (when enabled): the MACHINE half only — the recorded engine location still
   // points at an engine. Live proofs (doctor/lookup against real stores) are session
-  // work owned by the check skill: the Atlas CLI contract belongs to Atlas, not this
-  // engine, so `check` stops at the binding.
-  if (lock.atlas) {
-    const aRoot = local?.atlasRoot;
-    if (!aRoot) add('atlas', 'warn', 'enabled, but the engine location is not recorded (legacy workspace) — re-running setup records it');
-    else if (await exists(path.join(String(aRoot), 'atlas.mjs'))) add('atlas', 'ok', `engine at ${aRoot}`);
-    else add('atlas', 'fail', `engine not found at ${aRoot} (no atlas.mjs) — fix atlasRoot in .taut/local.json or re-run setup`);
+  // work owned by the check skill: the KAUT CLI contract belongs to KAUT, not this
+  // engine, so `check` stops at the binding. A legacy engine checkout still shipping
+  // atlas.mjs (pre-rename) passes the probe the same; `kautRoot ?? atlasRoot` is the
+  // local.json load-point normalization.
+  if (lock.kaut) {
+    const kRoot = local?.kautRoot ?? local?.atlasRoot;
+    if (!kRoot) add('kaut', 'warn', 'enabled, but the engine location is not recorded (legacy workspace) — re-running setup records it');
+    else if (await exists(path.join(String(kRoot), 'kaut.mjs')) || await exists(path.join(String(kRoot), 'atlas.mjs'))) add('kaut', 'ok', `engine at ${kRoot}`);
+    else add('kaut', 'fail', `engine not found at ${kRoot} (no kaut.mjs or legacy atlas.mjs) — fix kautRoot in .taut/local.json or re-run setup`);
   }
 
   // MCP: a REAL handshake per allowed server, through the SAME chain the harness uses —
@@ -240,6 +244,6 @@ export async function cmdCheck(opts: CliOpts): Promise<void> {
   }
   p(failed.length
     ? `\n${red(`NOT READY — ${failed.length} check(s) failed`)}${warned.length ? yellow(` (+${warned.length} warning(s))`) : ''}. Fix the ✖ lines above, then re-run.`
-    : `\n${green('READY')} — the workspace can run practical work${warned.length ? yellow(` (${warned.length} warning(s) above)`) : ''}. In-session proofs (live MCP tool calls, Atlas) — run the deployment's check skill.`);
+    : `\n${green('READY')} — the workspace can run practical work${warned.length ? yellow(` (${warned.length} warning(s) above)`) : ''}. In-session proofs (live MCP tool calls, KAUT) — run the deployment's check skill.`);
   process.exit(failed.length ? 1 : 0);
 }
