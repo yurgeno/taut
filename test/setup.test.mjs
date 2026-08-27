@@ -412,3 +412,27 @@ test('legacy alias: `atlas` answers key, atlas markers and requires:[atlas] gate
   assert.ok(instr.includes(`node ${legacyEngine}/atlas.mjs`), 'invoke line falls back to the legacy CLI file that exists');
   await run(process.execPath, [CLI, 'verify', '--workspace', wsOn], env);
 });
+
+test('knowledge-role MCP server gets the recorded engine location as fixedEnv', async () => {
+  // The engine LOCATION is taut's knowledge (kautRoot); where the knowledge DATA lives
+  // is the engine's own (`kaut home`) — only KAUT_ENGINE is mandated, nothing else.
+  const kdPack = path.join(TMP, 'ke-pack');
+  await fs.mkdir(path.join(kdPack, 'skills', 'ke-plan'), { recursive: true });
+  await fs.writeFile(path.join(kdPack, 'skills', 'ke-plan', 'SKILL.md'),
+    '---\nname: ke-plan\ndescription: ke\n---\nbody\n');
+  await fs.mkdir(path.join(kdPack, 'catalog'), { recursive: true });
+  await fs.writeFile(path.join(kdPack, 'catalog', 'mcp.json'), JSON.stringify({ servers: {
+    know: { role: 'knowledge', serverKey: 'kaut', package: 'kaut-engine', pin: 'engine', command: 'node', args: ['x'], env: ['KAUT_ENGINE'], fixedEnv: {} },
+  } }));
+  const ws = path.join(TMP, 'ws', 'ke');
+  const answers = path.join(TMP, 'ke.answers.json');
+  await fs.writeFile(answers, JSON.stringify({
+    harness: 'claude-code', kaut: kautStub, skills: 'all', mcp: 'all', workspace: ws, repos: [repoB],
+  }));
+  await run(process.execPath, [CLI, 'setup', '--answers', answers, '--yes'], { env: { ...process.env, TAUT_DATA: kdPack } });
+  const spec = JSON.parse(await fs.readFile(path.join(ws, '.taut', 'mcp-servers.json'), 'utf8'));
+  assert.equal(spec.know.fixedEnv.KAUT_ENGINE, kautStub);
+  assert.equal(spec.know.fixedEnv.KAUT_HOME, undefined, 'the data home is never orchestrator-mandated');
+  const local = JSON.parse(await fs.readFile(path.join(ws, '.taut', 'local.json'), 'utf8'));
+  assert.equal(local.kautData, undefined, 'no data-folder binding in taut');
+});

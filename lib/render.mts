@@ -37,7 +37,12 @@ export function renderMcpServersSpec(cfg: Cfg): string {
   const spec: Record<string, unknown> = {};
   for (const id of cfg.mcp) {
     const c = MCP_CATALOG[id];
-    spec[id] = { serverKey: c.serverKey, command: c.command, args: c.args, env: c.env, fixedEnv: c.fixedEnv };
+    // Knowledge-role servers get the workspace's recorded ENGINE location as fixedEnv
+    // (launcher applies it OVER local.env) — deterministic, nothing to fill by hand.
+    // WHERE the knowledge data lives is the engine's own business (`kaut home`), never
+    // passed by the orchestrator.
+    const kautEnv = c.role === 'knowledge' && cfg.kaut && cfg.kautRoot ? { KAUT_ENGINE: cfg.kautRoot } : {};
+    spec[id] = { serverKey: c.serverKey, command: c.command, args: c.args, env: c.env, fixedEnv: { ...c.fixedEnv, ...kautEnv } };
   }
   return JSON.stringify(spec, null, 2) + '\n';
 }
@@ -459,7 +464,7 @@ ${cfg.mcp.length ? cfg.mcp.map((id) => {
 ## KAUT
 
 ${cfg.kaut
-    ? `ENABLED.${cfg.kautRoot ? ` Engine: \`${cfg.kautRoot}\` — invoke as \`node ${cfg.kautRoot}/${kautCli(cfg.kautRoot)} <command>\` from a member-repo root (store resolution is cwd-based).` : ''} Knowledge lookups per the trust hierarchy.${roleSkill('knowledge') ? ` Self-maintenance via the \`${roleSkill('knowledge')}\` skill (role: knowledge).` : ''}`
+    ? `ENABLED.${cfg.kautRoot ? ` Engine: \`${cfg.kautRoot}\` — invoke as \`node ${cfg.kautRoot}/${kautCli(cfg.kautRoot)} <command>\` from a member-repo root (store resolution is cwd-based).` : ''} The engine resolves its own knowledge-data location (\`kaut home\` shows it) — nothing to pass. Knowledge lookups per the trust hierarchy.${roleSkill('knowledge') ? ` Self-maintenance via the \`${roleSkill('knowledge')}\` skill (role: knowledge).` : ''}`
     : `DISABLED at setup. Skills operate code-first (code-as-read is ground truth);
 KAUT-dependent skills are not installed and KAUT directives are compiled OUT of the
 installed skills/agents. The \`kaut\` CLI (or the legacy \`atlas\` CLI) must NOT be

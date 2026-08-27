@@ -193,6 +193,9 @@ must stay green.
 TAUT ships an enforcement surface (integrity gate, strict mode, the panel's token
 guard). Found a hole in it? [SECURITY.md](SECURITY.md) — report privately, please.
 
-## License
+## License & citation
 
-[Apache-2.0](LICENSE) © Yuriy Orlov
+Apache-2.0 — see [LICENSE](LICENSE) and [NOTICE](NOTICE). If you use TAUT or build on the
+concepts it implements, please cite it via [CITATION.cff](CITATION.cff).
+
+Contact: Yuriy Orlov <yuriy.orlov@undertrust.dev>
