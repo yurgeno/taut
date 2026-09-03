@@ -3,6 +3,7 @@
 // instructions. Copy artifacts (skills, agents .md, gate, LAWS.md) are not rendered —
 // they are installed byte-for-byte by lib/install.mts.
 import { existsSync } from 'node:fs';
+import { HARNESS_CAPS } from './harness-caps.mts';
 import path from 'node:path';
 
 import { FRAMEWORK_OWNED_NOTE, MCP_CATALOG, langName } from './constants.mts';
@@ -427,15 +428,12 @@ Skills are installed natively under \`.agents/skills/\` (invoke as \`$skill-name
 description-matching trigger them); subagents are native roles in \`.codex/agents/*.toml\`.
 TRUST this project on first open so \`.codex/config.toml\` (MCP) and project artifacts
 load. Model pins are mapped across harnesses via the deployment config's modelTiers
-ladder (unmapped pins inherit the session model). Recorded degradation: Claude-Code
-frontmatter tool allowlists are informational here.` : ''}${forOpencode ? `
+ladder (unmapped pins inherit the session model). Recorded degradation: ${HARNESS_CAPS.codex.degradations[0].text}` : ''}${forOpencode ? `
 opencode: skills load natively from \`.agents/skills/\` (the \`skill\` tool runs them;
 description-matching offers them); subagents are native agents in \`.opencode/agents/*.md\`
 (@-mention or the task tool). MCP servers and the session model pin live in
 \`opencode.json\`; the TAUT integrity gate runs as the \`.opencode/plugins/taut-gate.js\`
-plugin. Recorded degradations (capability mapping, surfaced not hidden): there is no
-prompt-time integrity sweep — drifted core artifacts are caught at the first managed
-tool call instead of the first prompt — and the session-start banner is best-effort.` : ''}
+plugin. Recorded degradations (capability mapping, surfaced not hidden): ${HARNESS_CAPS.opencode.degradations.slice(0, 2).map((d) => d.text).join(' — and ')}.` : ''}
 
 ## Memory (instance data · the deployment's own knowledge base)
 

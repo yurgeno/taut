@@ -3,6 +3,9 @@
 // axis: is the workspace CURRENT vs the framework, and the deliberate re-pin), and the
 // shared compileWorkspace step (install + local binding + lock + summary).
 import { execFileSync } from 'node:child_process';
+import { HARNESS_CAPS } from './harness-caps.mts';
+import { applyMarkers } from './markers.mts';
+import { renderCodexAgentToml, renderOpencodeAgentMd } from './render.mts';
 import fs from 'node:fs/promises';
 import path from 'node:path';
 import process from 'node:process';
@@ -10,7 +13,7 @@ import type { ExecFileSyncOptionsWithStringEncoding } from 'node:child_process';
 
 import { FW_ROOT, HARNESSES, MCP_CATALOG, initData, initDataFor, initProject, requireData, resolveDataRoot } from './constants.mts';
 import { bold, dim, exists, expandHome, fail, gitInfo, gitInfoOwn, green, isCommit, readIfExists, red, safeJoin, sha256, yellow } from './util.mts';
-import { kautRequired, neededAgents } from './artifacts.mts';
+import { gatesAll, kautRequired, loadCatalog, neededAgents } from './artifacts.mts';
 import { askText, banner } from './tui.mts';
 import { cfgFromWorkspace, gatherConfig, isConductorDir, listDeployments, normalizeHarnesses, relintRepoBindings } from './config.mts';
 import { TELEMETRY_LEVELS, createTelemetry } from '../gate/telemetry.mjs';
@@ -338,6 +341,7 @@ export async function statusData(ws: string): Promise<StatusData> {
     workspace: ws,
     deployment: manifest?.deployment ?? null,
     harnesses: lock.harnesses ?? (lock.harness ? [lock.harness] : []),
+    degradations: Object.fromEntries((lock.harnesses ?? (lock.harness ? [lock.harness] : [])).map((h) => [h, HARNESS_CAPS[h]?.degradations ?? []])),
     kaut: lock.kaut,
     generatedAt: lock.generatedAt,
     framework: { pin: lock.framework?.commit ?? null, head: delta.head, behind: delta.behind, pinKnown: delta.pinKnown, canonical, changedFiles: delta.files },
@@ -734,4 +738,48 @@ export async function cmdApply(opts: CliOpts): Promise<void> {
       },
     },
   });
+}
+
+// ---------------------------------------------------------------- render (compile preview)
+// `taut render --skill <name> | --agent <name> --harness <id> [--gates k=v,…] [--deployment <n>]
+// --stdout|--json`: what ONE source compiles to on ONE harness — the marker pass under the
+// given gates (default: every known gate ON), plus the per-harness agent render (Codex
+// TOML / opencode md) — without a workspace. Consumers (a linter, a studio) get the exact
+// bytes the installer would write, and the adapter's recorded degradations, from the
+// engine itself instead of re-implementing the compiler.
+export async function renderPreview(opts: { skill?: string; agent?: string; harness: string; gates?: Record<string, boolean>; deployment?: string | null }): Promise<{ harness: string; id: string; content: string; transform: string; degradations: { id: string; text: string }[] }> {
+  const caps = HARNESS_CAPS[opts.harness] ?? fail(`unknown harness "${opts.harness}" (adapters: ${HARNESSES.join(', ')})`);
+  const deployments = await listDeployments();
+  const profile = opts.deployment ? (deployments.find((d) => d.name === opts.deployment) ?? fail(`unknown deployment "${opts.deployment}"`)) : (deployments.length === 1 ? deployments[0] : null);
+  if (profile) initProject(profile.dir);
+  const catalog = await loadCatalog(profile);
+  const gates = { ...gatesAll(true), ...(opts.gates ?? {}) };
+  const cfgStub = { profile } as unknown as Cfg;
+  if (opts.skill) {
+    const src = catalog.skills.get(opts.skill) ?? fail(`skill "${opts.skill}" not found in the catalog`);
+    const text = applyMarkers(await fs.readFile(src.path, 'utf8'), gates, `skills/${opts.skill}/SKILL.md`);
+    return { harness: caps.id, id: `${caps.skillsDir}/${opts.skill}/SKILL.md`, content: text, transform: 'gates', degradations: caps.degradations };
+  }
+  if (opts.agent) {
+    const src = catalog.agents.get(opts.agent) ?? fail(`agent "${opts.agent}" not found in the catalog`);
+    const gated = applyMarkers(await fs.readFile(src.path, 'utf8'), gates, `agents/${opts.agent}.md`);
+    if (caps.id === 'codex') return { harness: caps.id, id: `${caps.agentsDir}/${opts.agent}.toml`, content: renderCodexAgentToml(opts.agent, gated, cfgStub), transform: 'gates+render', degradations: caps.degradations };
+    if (caps.id === 'opencode') return { harness: caps.id, id: `${caps.agentsDir}/${opts.agent}.md`, content: renderOpencodeAgentMd(opts.agent, gated, cfgStub), transform: 'gates+render', degradations: caps.degradations };
+    return { harness: caps.id, id: `${caps.agentsDir}/${opts.agent}.md`, content: gated, transform: 'gates', degradations: caps.degradations };
+  }
+  return fail('render: pass --skill <name> or --agent <name>');
+}
+
+export async function cmdRender(opts: CliOpts): Promise<void> {
+  await initDataFor({ explicit: opts.data ?? null, ws: opts.workspace ?? null });
+  if (!opts.harness) fail('render: --harness <id> is required');
+  const gates: Record<string, boolean> = {};
+  for (const kv of (opts.gates ?? '').split(',').map((x) => x.trim()).filter(Boolean)) {
+    const [k, v] = kv.split('=');
+    if (!/^[a-z][a-z0-9-]*$/.test(k) || !['true', 'false', 'on', 'off', undefined].includes(v)) fail(`render: bad --gates entry "${kv}" (key=true|false)`);
+    gates[k] = v === undefined || v === 'true' || v === 'on';
+  }
+  const r = await renderPreview({ skill: opts.skill, agent: opts.agent, harness: opts.harness, gates, deployment: opts.deployment ?? null });
+  if (opts.json) process.stdout.write(JSON.stringify(r, null, 2) + '\n');
+  else process.stdout.write(r.content);
 }

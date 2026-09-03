@@ -31,6 +31,13 @@ export interface CliOpts {
   since?: string;
   to?: string;
   help?: boolean;
+  // render (compile-preview of ONE artifact, no workspace)
+  skill?: string;
+  agent?: string;
+  harness?: string;
+  gates?: string;
+  deployment?: string;
+  stdout?: boolean;
 }
 
 // A connected member repo (name = folder basename, unique per workspace).
@@ -186,6 +193,8 @@ export interface StatusData {
   workspace: string;
   deployment: string | null;
   harnesses: string[];
+  // per enabled harness: the adapter's recorded degradations (data, lib/harness-caps.mts)
+  degradations: Record<string, { id: string; text: string }[]>;
   kaut: boolean;
   generatedAt: string;
   framework: {

@@ -20,7 +20,7 @@ import type { Catalog, Profile, RepoDocFile } from './types.mts';
 // verify reconstruction (lib/lock.mts). Catalog metadata is parsed under BOTH extreme
 // gate settings and must not vary between them (wiring is capability-independent).
 const GATE_KEYS = ['kaut', 'mcp-docs']; // legacy marker key `atlas` = alias of the kaut gate
-const gatesAll = (v: boolean): Record<string, boolean> => withLegacyGates(Object.fromEntries(GATE_KEYS.map((k) => [k, v])));
+export const gatesAll = (v: boolean): Record<string, boolean> => withLegacyGates(Object.fromEntries(GATE_KEYS.map((k) => [k, v])));
 
 // ---------------------------------------------------------------- frontmatter (subset)
 

@@ -19,7 +19,9 @@
 //   lock.mts       taut.lock + verify (--source re-derivation from the pin)
 //   check.mts      readiness check: integrity, live gate probe, repos, MCP handshake
 //   panel.mts      the acting loopback panel (serves lib/panel.html + JSON API)
-//   commands.mts   setup / status / update / repair / verify / compileWorkspace
+//   harness-caps.mts adapter capability registry (targets, allowlist semantics, degradations)
+//   frontmatter.mts  frontmatter EMITTER — inverse of the artifacts.mts parser (round-trip law)
+//   commands.mts   setup / status / update / repair / verify / render / compileWorkspace
 import process from 'node:process';
 
 // Node floor guard BEFORE the .mts imports load (static imports would evaluate first
@@ -34,7 +36,7 @@ if (nodeMajor < 24) {
 }
 
 const { TautError, fail } = await import('./lib/util.mts');
-const { cmdApply, cmdRepair, cmdRepoScaffold, cmdSetup, cmdStatus, cmdUpdate, cmdVerify } = await import('./lib/commands.mts');
+const { cmdApply, cmdRender, cmdRepair, cmdRepoScaffold, cmdSetup, cmdStatus, cmdUpdate, cmdVerify } = await import('./lib/commands.mts');
 const { cmdCheck } = await import('./lib/check.mts');
 const { cmdPanel } = await import('./lib/panel.mts');
 const { cmdReport } = await import('./lib/report.mts');
@@ -66,6 +68,12 @@ function parseArgs(argv) {
     else if (a === '--telemetry') opts.telemetry = argv[++i];
     else if (a === '--since') opts.since = argv[++i];
     else if (a === '--to') opts.to = argv[++i];
+    else if (a === '--skill') opts.skill = argv[++i];
+    else if (a === '--agent') opts.agent = argv[++i];
+    else if (a === '--harness') opts.harness = argv[++i];
+    else if (a === '--gates') opts.gates = argv[++i];
+    else if (a === '--deployment') opts.deployment = argv[++i];
+    else if (a === '--stdout') opts.stdout = true;
     else if (a === '--help' || a === '-h') opts.help = true;
     else opts._.push(a);
   }
@@ -89,6 +97,13 @@ Usage:
   taut.mjs repo-scaffold [<repo>...] [--pack] [--workspace <dir>] [--data <dir>]
   taut.mjs report [--workspace <dir>] [--since YYYY-MM-DD] [--to YYYY-MM-DD] [--json]
   taut.mjs panel  [--workspace <dir>] [--port <n>]
+
+  taut.mjs render --skill <name> | --agent <name> --harness <id> [--gates kaut=false,mcp-docs=true,…]
+                  [--deployment <name>] [--data <dir>] [--stdout | --json]
+    Compile-preview of ONE source on ONE harness, no workspace: the capability-marker pass
+    under the given gates (default: every known gate ON) plus the harness's agent render
+    (Codex TOML / opencode markdown). --json adds the target path and the adapter's
+    recorded degradations. For linters and studios — the exact bytes the installer writes.
 
 CORE vs DATA (split 2026-08-15): this repo is the ENGINE only — content (skills, agents,
 docs incl. LAWS.md, catalog/mcp.json, deployments + runbooks) lives in a DATA PACK repo.
@@ -303,6 +318,7 @@ try {
   else if (cmd === 'apply') await cmdApply(opts);
   else if (cmd === 'repo-scaffold') await cmdRepoScaffold(opts);
   else if (cmd === 'report') await cmdReport(opts);
+  else if (cmd === 'render') await cmdRender(opts);
   else if (cmd === 'panel') await cmdPanel(opts);
   else fail(`unknown command "${cmd}" (see --help)`);
 } catch (e) {

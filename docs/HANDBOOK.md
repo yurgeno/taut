@@ -153,6 +153,7 @@ trust root, and the gate would rather refuse than guess.
 | `update` | re-pins engine + pack (recompile) | deliberate actualization; `--data-only` re-pins the pack alone (refuses when the core moved); an "all" skill selection auto-installs newly shipped skills. Skips the recompile only when BOTH pins are at HEAD, no artifact drifted, **and the pack tree is clean** — an uncommitted or non-git pack always recompiles, so freshly written pack content (repo descriptors, a dropped-in skill) installs instead of being reported "already current" |
 | `repair` | restores drifted/deleted files (recompile from the workspace's own manifest) | healing after tampering or accidents; renders with the current engine tree |
 | `apply` | toggles: `--enable/--disable-skill`, `--enable/--disable-mcp`, `--connect/--disconnect-repo`, `--enable/--disable-harness`, `--mode strict|normal`, `--telemetry basic|extended` | one deliberate recompile per batch; the panel's checklists ride this |
+| `render` | nothing (read-only, no workspace needed) | compile-preview of ONE source on ONE harness: `render --skill <name> \| --agent <name> --harness <id> [--gates kaut=false,…] [--deployment <n>] --stdout\|--json` — the marker pass under the given gates plus the harness's agent render (Codex TOML / opencode md); `--json` adds the target path and the adapter's recorded degradations. Built for linters and studios (e.g. SAUT) that need the exact bytes the installer writes |
 | `report` | nothing (read-only) | LOCAL aggregation of the workspace's telemetry files: sessions, actualization lag, usage by artifact, denials by cause, lifecycle chronology; `--since`/`--to`/`--json`. Prints only on this machine — sharing the output is a manual act |
 
 **The values channel:** deployment VALUES (model tiers, stacks, flow values) enter the
@@ -188,7 +189,16 @@ wiring, MCP config — and nothing else); enabling renders it back identically. 
 one harness stays enabled. The gate routes artifact checks by the caller's identity, so
 a drifted copy blocks only that harness's sessions (a drifted Codex copy blocks Codex
 sessions while intact Claude Code sessions keep working — and vice versa). Current
-adapters: Claude Code and Codex; adding a harness extends the engine, never the packs.
+adapters: Claude Code, Codex and opencode; adding a harness extends the engine, never the packs.
+
+What each adapter does with a harness-neutral source is DATA, not prose:
+`lib/harness-caps.mts` records, per harness, the target directories, what a skill's
+`allowed-tools` means once installed there (Claude Code: a *grant* — it pre-approves, it
+does not restrict; Codex/opencode: informational), what a subagent's `tools:` becomes
+(Claude Code: a native allowlist; Codex: dropped on TOML render), how the gate reaches a
+session, and the recorded degradations. The generated instructions render those sentences
+from the table, `status --json` carries them under `degradations`, and `render --json`
+returns them with the preview.
 
 ## 8. Model profiles at runtime
 
