@@ -6,6 +6,7 @@ import { CLI, FIXTURE_PACK, run } from './helpers.mjs';
 import { HARNESSES } from '../lib/constants.mts';
 import { HARNESS_CAPS, HARNESS_IDS } from '../lib/harness-caps.mts';
 import { emitFrontmatter, FrontmatterEmitError } from '../lib/frontmatter.mts';
+import { INSTRUCTIONS_WIDTH, wrapFrom } from '../lib/render.mts';
 import { parseFrontmatter } from '../lib/artifacts.mts';
 
 const taut = (...args) => run('node', [CLI, ...args], { env: { ...process.env, TAUT_DATA: FIXTURE_PACK } });
@@ -67,4 +68,26 @@ test('frontmatter emitter round-trips through the engine parser and refuses the 
   assert.throws(() => emitFrontmatter({ name: 'x', description: 'two\nlines' }), FrontmatterEmitError);
   assert.throws(() => emitFrontmatter({ name: 'x', list: [1, 2] }), FrontmatterEmitError);
   assert.throws(() => emitFrontmatter({ name: 'x', metadata: { taut: {} } }), FrontmatterEmitError);
+});
+
+// A sentence composed from the capability table ships inside hard-wrapped prose. These are
+// the EXACT lines the instructions carried before the table existed: a recompile must not
+// rewrap a file whose content did not change.
+test('degradation sentences wrap exactly as the instructions did before the registry', () => {
+  const codex = wrapFrom('ladder (unmapped pins inherit the session model). Recorded degradation:', HARNESS_CAPS.codex.degradations[0].text);
+  assert.deepEqual(codex.split('\n'), [
+    'ladder (unmapped pins inherit the session model). Recorded degradation: Claude-Code',
+    'frontmatter tool allowlists are informational here.',
+  ]);
+  const opencode = wrapFrom('plugin. Recorded degradations (capability mapping, surfaced not hidden):',
+    `${HARNESS_CAPS.opencode.degradations.slice(0, 2).map((d) => d.text).join(' — and ')}.`);
+  assert.deepEqual(opencode.split('\n'), [
+    'plugin. Recorded degradations (capability mapping, surfaced not hidden): there is no',
+    'prompt-time integrity sweep — drifted core artifacts are caught at the first managed',
+    'tool call instead of the first prompt — and the session-start banner is best-effort.',
+  ]);
+  for (const line of [...codex.split('\n'), ...opencode.split('\n')]) assert.ok(line.length <= INSTRUCTIONS_WIDTH, `"${line}" is ${line.length} > ${INSTRUCTIONS_WIDTH}`);
+  // the wrapper itself: a word longer than the width still gets its own line, never a split
+  assert.deepEqual(wrapFrom('x', 'aaaa bbbb cccc', 10).split('\n'), ['x aaaa', 'bbbb cccc']);
+  assert.equal(wrapFrom('', 'one two', 100), 'one two');
 });

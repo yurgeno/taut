@@ -1,6 +1,6 @@
 {
   "name": "taut",
-  "version": "0.7.0",
+  "version": "0.7.1",
   "private": true,
   "description": "TAUT (Toolchain Actualization Under Trust) — compile, actualize and guard agent workspaces",
   "license": "Apache-2.0",

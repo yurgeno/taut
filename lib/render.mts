@@ -267,6 +267,23 @@ the chosen one.
 `;
 }
 
+// The generated instructions are hard-wrapped prose. A sentence composed at render time
+// from the capability table (lib/harness-caps.mts) must wrap the SAME way, or a recompile
+// would silently rewrap a shipped file — a diff with no change in meaning. Greedy wrap at
+// the width the rest of the document uses, starting from a line that already carries
+// `prefix`. Pinned by test (test/render.test.mjs).
+export const INSTRUCTIONS_WIDTH = 84;
+export function wrapFrom(prefix: string, text: string, width = INSTRUCTIONS_WIDTH): string {
+  const out: string[] = [];
+  let line = prefix;
+  for (const word of text.split(/\s+/).filter(Boolean)) {
+    if (line && line.length + 1 + word.length > width) { out.push(line); line = word; }
+    else line = line ? `${line} ${word}` : word;
+  }
+  out.push(line);
+  return out.join('\n');
+}
+
 export function renderInstructions(cfg: Cfg, { readers }: { readers: string[] }): string {
   // `readers` = the enabled harnesses that read THIS instruction file. CLAUDE.md has one
   // reader (claude-code); AGENTS.md is a SHARED convention — codex and opencode both read
@@ -428,12 +445,12 @@ Skills are installed natively under \`.agents/skills/\` (invoke as \`$skill-name
 description-matching trigger them); subagents are native roles in \`.codex/agents/*.toml\`.
 TRUST this project on first open so \`.codex/config.toml\` (MCP) and project artifacts
 load. Model pins are mapped across harnesses via the deployment config's modelTiers
-ladder (unmapped pins inherit the session model). Recorded degradation: ${HARNESS_CAPS.codex.degradations[0].text}` : ''}${forOpencode ? `
+${wrapFrom('ladder (unmapped pins inherit the session model). Recorded degradation:', HARNESS_CAPS.codex.degradations[0].text)}` : ''}${forOpencode ? `
 opencode: skills load natively from \`.agents/skills/\` (the \`skill\` tool runs them;
 description-matching offers them); subagents are native agents in \`.opencode/agents/*.md\`
 (@-mention or the task tool). MCP servers and the session model pin live in
 \`opencode.json\`; the TAUT integrity gate runs as the \`.opencode/plugins/taut-gate.js\`
-plugin. Recorded degradations (capability mapping, surfaced not hidden): ${HARNESS_CAPS.opencode.degradations.slice(0, 2).map((d) => d.text).join(' — and ')}.` : ''}
+${wrapFrom('plugin. Recorded degradations (capability mapping, surfaced not hidden):', `${HARNESS_CAPS.opencode.degradations.slice(0, 2).map((d) => d.text).join(' — and ')}.`)}` : ''}
 
 ## Memory (instance data · the deployment's own knowledge base)
 
