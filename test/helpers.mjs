@@ -77,7 +77,10 @@ export function suite(name) {
   async function makeRepo(rname, files = {}) {
     const dir = path.join(TMP, 'repos', rname);
     await fs.mkdir(path.join(dir, '.git'), { recursive: true });
-    for (const [rel, content] of Object.entries(files)) await fs.writeFile(path.join(dir, rel), content);
+    for (const [rel, content] of Object.entries(files)) {
+      await fs.mkdir(path.dirname(path.join(dir, rel)), { recursive: true }); // nested fixture paths
+      await fs.writeFile(path.join(dir, rel), content);
+    }
     return dir;
   }
 

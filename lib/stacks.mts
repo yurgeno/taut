@@ -10,6 +10,7 @@
 // every compile, so a repo gaining a toolchain is picked up by the next update.
 // Stack keys are an OPEN vocabulary: a pack may gate on stacks this table cannot
 // detect — declare them in the deployment; unknown `stack-*` branches compile out.
+import fs from 'node:fs/promises';
 import path from 'node:path';
 
 import { exists, fail } from './util.mts';
@@ -22,10 +23,34 @@ const PROBES: [string, string[]][] = [
   ['node', ['package.json']],
   ['jvm', ['pom.xml', 'build.gradle', 'build.gradle.kts', 'settings.gradle', 'settings.gradle.kts']],
   ['php', ['composer.json']],
-  ['python', ['pyproject.toml', 'requirements.txt', 'setup.py']],
+  // Every common Python manifest / lock file: PEP 621 / Poetry / PDM / uv / Hatch
+  // (pyproject), pip (requirements), setuptools (setup.py/setup.cfg), Pipenv, Conda,
+  // and the uv / poetry / pdm locks. Variant requirements files and plain-script repos
+  // are handled by `pythonExtras` below.
+  ['python', ['pyproject.toml', 'requirements.txt', 'setup.py', 'setup.cfg', 'Pipfile', 'Pipfile.lock',
+    'environment.yml', 'uv.lock', 'poetry.lock', 'pdm.lock']],
   ['go', ['go.mod']],
   ['rust', ['Cargo.toml']],
 ];
+
+const REQUIREMENTS_VARIANT = /^requirements[\w.-]*\.txt$/;
+const PY_SCRIPT_DIRS = ['scripts', 'bin'];
+
+async function names(dir: string): Promise<string[]> {
+  return fs.readdir(dir).catch(() => [] as string[]);
+}
+
+// Python beyond exact file names: `requirements-<x>.txt` and `requirements/*.txt`
+// (pip layouts), and a plain-script repository — `*.py` at the root or under
+// `scripts/` / `bin/` with no manifest at all. Directory listings, no content reads.
+async function pythonExtras(repoPath: string): Promise<boolean> {
+  const root = await names(repoPath);
+  if (root.some((n) => REQUIREMENTS_VARIANT.test(n) || n.endsWith('.py'))) return true;
+  if ((await names(path.join(repoPath, 'requirements'))).some((n) => n.endsWith('.txt'))) return true;
+  for (const d of PY_SCRIPT_DIRS)
+    if ((await names(path.join(repoPath, d))).some((n) => n.endsWith('.py'))) return true;
+  return false;
+}
 
 // Same shape the marker keys allow after the `stack-` prefix.
 const STACK_NAME = /^[a-z][a-z0-9-]*$/;
@@ -39,11 +64,12 @@ export function normalizeStackList(v: unknown, where: string): string[] {
 }
 
 export async function detectStacks(repoPath: string): Promise<string[]> {
-  const out: string[] = [];
+  const found = new Set<string>();
   for (const [stack, files] of PROBES)
     for (const f of files)
-      if (await exists(path.join(repoPath, f))) { out.push(stack); break; }
-  return out;
+      if (await exists(path.join(repoPath, f))) { found.add(stack); break; }
+  if (!found.has('python') && await pythonExtras(repoPath)) found.add('python');
+  return PROBES.map(([stack]) => stack).filter((s) => found.has(s)); // table order, deterministic
 }
 
 // Per-repo resolution over the CONNECTED set; also flattens the workspace union onto

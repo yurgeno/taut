@@ -71,7 +71,12 @@ server is installed) — unknown capability keys FAIL the compile.
 **Stack keys — `stack-<toolchain>` — are an OPEN vocabulary.** The compiler resolves
 each connected repo's toolchains (the deployment's `repos.known[].stack` declaration,
 otherwise deterministic file probes: `package.json` → node, `pom.xml`/`build.gradle*` →
-jvm, `composer.json` → php, plus python/go/rust) and turns the union into
+jvm, `composer.json` → php, `go.mod` → go, `Cargo.toml` → rust, and **python** by any
+common manifest or lock file — `pyproject.toml` (PEP 621 / Poetry / PDM / uv / Hatch),
+`requirements.txt` incl. `requirements-*.txt` and `requirements/*.txt`, `setup.py`,
+`setup.cfg`, `Pipfile` / `Pipfile.lock`, `environment.yml` (Conda), `uv.lock` /
+`poetry.lock` / `pdm.lock` — or, with no manifest at all, plain `*.py` scripts at the
+repo root or under `scripts/` / `bin/`) and turns the union into
 `stack-<x>` gates. A branch whose stack no connected repo has simply compiles OUT —
 never a lint failure — so base skills can carry branches for every toolchain the pack
 supports and each workspace receives exactly the branches its repos need. The resolved

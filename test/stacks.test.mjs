@@ -26,9 +26,12 @@ JVM-BRANCH-LINE
 <!-- stack-php:on -->
 PHP-BRANCH-LINE
 <!-- stack-php:end -->
+<!-- stack-python:on -->
+PYTHON-BRANCH-LINE
+<!-- stack-python:end -->
 `;
 
-let repoCore; let repoSvc;
+let repoCore; let repoSvc; let repoPy;
 before(async () => {
   await reset();
   await makePack();
@@ -42,6 +45,7 @@ before(async () => {
   await commitAll(PACK, 'stack fixtures');
   repoCore = await makeRepo('repo-core', { 'package.json': '{"name":"core"}\n' });
   repoSvc = await makeRepo('repo-svc', { 'composer.json': '{}\n' }); // detection would say php; declaration says jvm
+  repoPy = await makeRepo('repo-py', { 'scripts/rotate.py': 'print(1)\n' }); // plain scripts, no manifest
 });
 after(reset);
 
@@ -50,6 +54,16 @@ test('unit: detection probes, declaration normalization, open marker vocabulary'
   assert.deepEqual(await detectStacks(repoSvc), ['php']);
   const empty = await makeRepo('repo-empty');
   assert.deepEqual(await detectStacks(empty), []);
+
+  // Python: every common manifest, variant requirements layouts, and plain-script repos
+  assert.deepEqual(await detectStacks(repoPy), ['python'], 'scripts/*.py with no manifest');
+  for (const [file, content] of [
+    ['setup.cfg', '[metadata]\nname = x\n'], ['Pipfile', '[packages]\n'], ['environment.yml', 'dependencies: []\n'],
+    ['uv.lock', ''], ['poetry.lock', ''], ['pdm.lock', ''], ['requirements-dev.txt', 'pytest\n'],
+    ['requirements/base.txt', 'flask\n'], ['tool.py', 'print(1)\n'], ['bin/run.py', 'print(1)\n'],
+  ]) assert.deepEqual(await detectStacks(await makeRepo(`py-${file.replace(/[^a-z]/g, '')}`, { [file]: content })), ['python'], file);
+  assert.deepEqual(await detectStacks(await makeRepo('py-and-node', { 'package.json': '{}\n', 'pyproject.toml': '' })), ['node', 'python'], 'table order');
+  assert.deepEqual(await detectStacks(await makeRepo('py-nested-only', { 'src/app/main.py': '' })), [], 'a .py below the probed dirs is not a scripts repo');
 
   assert.deepEqual(normalizeStackList('jvm', 't'), ['jvm']);
   assert.deepEqual(normalizeStackList(['php', 'node', 'php'], 't'), ['node', 'php']);
@@ -66,18 +80,19 @@ test('unit: detection probes, declaration normalization, open marker vocabulary'
 test('e2e: compiled skill carries exactly the connected stacks; declaration beats detection; lock records; verify --source passes', async () => {
   const { ws, stdout } = await setup('stack-ws', {
     deployment: 'fxdep', harness: 'claude-code', kaut: false, skills: 'all', mcp: [],
-    repos: [repoCore, repoSvc],
+    repos: [repoCore, repoSvc, repoPy],
   });
-  assert.match(stdout, /stacks\s+jvm \+ node/);
+  assert.match(stdout, /stacks\s+jvm \+ node \+ python/);
 
   const skill = await fs.readFile(path.join(ws, '.claude', 'skills', 'fx-plan', 'SKILL.md'), 'utf8');
   assert.match(skill, /NODE-BRANCH-LINE/, 'node branch survives (repo-core detected)');
   assert.match(skill, /JVM-BRANCH-LINE/, 'jvm branch survives (repo-svc declared)');
   assert.ok(!skill.includes('PHP-BRANCH-LINE'), 'php branch compiles out (declaration beats composer.json detection)');
+  assert.match(skill, /PYTHON-BRANCH-LINE/, 'python branch survives (repo-py detected as a plain-script repo)');
   assert.ok(!skill.includes('stack-node:on'), 'marker lines never ship');
 
   const lock = JSON.parse(await fs.readFile(path.join(ws, 'taut.lock'), 'utf8'));
-  assert.deepEqual(lock.stacks, ['jvm', 'node']);
+  assert.deepEqual(lock.stacks, ['jvm', 'node', 'python']);
 
   const manifest = JSON.parse(await fs.readFile(path.join(ws, 'manifest.json'), 'utf8'));
   const rows = Object.fromEntries(manifest.repos.map((r) => [r.name, r]));
@@ -94,7 +109,7 @@ test('e2e: compiled skill carries exactly the connected stacks; declaration beat
   // from the manifest, detection re-run live).
   await run(process.execPath, [CLI, 'repair', '--workspace', ws]);
   const lock2 = JSON.parse(await fs.readFile(path.join(ws, 'taut.lock'), 'utf8'));
-  assert.deepEqual(lock2.stacks, ['jvm', 'node']);
+  assert.deepEqual(lock2.stacks, ['jvm', 'node', 'python']);
 });
 
 test('repo-scaffold stamps the DETECTED toolchain into the skeleton descriptor', async () => {
