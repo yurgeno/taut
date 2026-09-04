@@ -244,6 +244,24 @@ update/repair (surfaced in the output). Event completeness differs per harness h
 surface and is surfaced in `taut report`, never hidden. A pre-telemetry
 `usage.jsonl` stays untouched; `report` still reads it.
 
+**Both invocation paths are counted.** A skill can be reached two ways: the harness's
+skill tool (the model decides) and a direct `/slash` (you decide). They arrive on
+different hooks, and the slash path never touches the tool chokepoint — so a skill that
+declares `disable-model-invocation: true` is reachable ONLY by slash. The gate records
+each path and stamps the row with `via`. On the slash path it counts only what the
+harness itself routed (its own `expansion_type`/`command_name` fields), never a name
+matched in prompt text: the integrity check there is deliberately broad — erring toward
+checking — and a counter must not inherit that breadth, or merely naming a skill would
+register as using one. A harness that does not send routing fields records nothing on
+this path rather than inventing a number. Rows the gate cannot name at all (sibling
+tools caught by a partial hook matcher) are not written.
+
+**Self-test rows are marked, never counted as use.** `taut check` proves the gate is
+live by running it out of band against the first skill in the manifest. Those rows carry
+`probe: true`; `taut report` excludes them from usage and friction and prints how many
+it excluded. Files written before this existed are recognized by the reserved probe name
+(`taut-check-foreign-probe`) and the same-second row beside it.
+
 ## 10. Strict mode
 
 `strict` = only the compiled toolchain runs; `normal` = framework artifacts coexist

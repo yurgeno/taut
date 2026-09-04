@@ -55,8 +55,20 @@ function initTelemetry(level, meta) {
   try { tel = telemetryMod ? telemetryMod.createTelemetry({ workspace: WS, level, meta }) : null; } catch { tel = null; }
 }
 initTelemetry(undefined, null);
+// `taut check` proves enforcement is live by running THIS gate out of band, against the
+// first skill in the manifest. Those rows are indistinguishable from real invocations
+// unless the probe says so — left unmarked, a self-test inflates one skill's usage and
+// makes the usage column untrustworthy exactly where it looks most convincing.
+const PROBE = process.env.TAUT_PROBE === '1';
 function logUsage(entry) {
-  try { tel?.log(entry); } catch { /* telemetry must never break the gate */ }
+  // Every invocation says which path it arrived on. Stamped here rather than at each call
+  // site so no path can be added later and silently go unlabelled — and so a reader can
+  // tell a workspace whose gate records both paths from one whose files predate that: no
+  // `via` anywhere means the slash path was never being counted, which is a different
+  // statement from "nobody used it".
+  const row = entry.event === 'invoke' && entry.via === undefined && EVENT === 'pretooluse'
+    ? { ...entry, via: 'tool' } : entry;
+  try { tel?.log(PROBE ? { ...row, probe: true } : row); } catch { /* telemetry must never break the gate */ }
 }
 
 function denyTool(reason) {
@@ -181,7 +193,11 @@ try {
         logUsage({ ts, event: 'invoke', kind, name, decision: 'deny', cause: 'strict-foreign', harness: HARNESS, session_id: sid });
         denyTool(`TAUT gate: ${kind} "${name}" is not part of the compiled toolchain. ${strictHint}`);
       }
-      logUsage({ ts, event: 'invoke', kind, name, decision: 'allow', managed: false, harness: HARNESS, session_id: sid });
+      // Only NAMED artifacts are recorded. The claude-code matcher is a partial match, so
+      // sibling tools (TaskOutput, TaskStop, …) reach the gate too and resolve to no kind
+      // and no name — a row for one of those carries zero information and only dilutes the
+      // usage stream it shares a file with.
+      if (name) logUsage({ ts, event: 'invoke', kind, name, decision: 'allow', managed: false, harness: HARNESS, session_id: sid });
       process.exit(0); // not a TAUT-managed artifact — none of our business
     }
     const coreBad = checkIds(coreIds);
@@ -234,6 +250,24 @@ try {
     if (bad.length) {
       logUsage({ ts, event: 'expansion', decision: 'block', drifted: bad.length, harness: HARNESS, session_id: sid });
       blockExit2(`TAUT gate: blocked — drifted artifacts: ${bad.join(', ')}. ${REPAIR_HINT}`);
+    }
+    // A direct /slash never reaches PreToolUse(Skill), so this is the ONLY place a
+    // user-invoked skill can be counted — and a skill declaring
+    // `disable-model-invocation: true` is reachable by NO other path, which is why the
+    // usage stream used to read zero for exactly the skills a human drives by hand.
+    //
+    // Enforcement above stays on the broad `mentions()` match: erring toward checking is
+    // right for integrity. Telemetry must err the other way — a prompt that merely NAMES a
+    // skill is not a use of it — so the usage row is written only from the harness's own
+    // routing fields, never from a text match. A harness that does not send them records
+    // nothing rather than inventing a number.
+    if (input.expansion_type === 'slash_command' && typeof input.command_name === 'string') {
+      const cmd = input.command_name.split(':').pop();      // plugin skills arrive as "plugin:name"
+      const id = skillArtifact(cmd);
+      // Builtin commands (/model, /compact) share this event but are harness features, not
+      // toolchain artifacts: only a skill backed by a file on disk is recorded.
+      if (byId.has(id)) logUsage({ ts, event: 'invoke', kind: 'skill', name: cmd, decision: 'allow', managed: true, via: 'slash', harness: HARNESS, session_id: sid });
+      else if (fs.existsSync(path.join(WS, id))) logUsage({ ts, event: 'invoke', kind: 'skill', name: cmd, decision: 'allow', managed: false, via: 'slash', harness: HARNESS, session_id: sid });
     }
     process.exit(0);
   }

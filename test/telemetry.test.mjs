@@ -182,3 +182,100 @@ test('report: aggregates daily files, honors --since, prints the privacy note; -
     (e) => /expected YYYY-MM-DD/.test(e.stderr ?? `${e}`),
   );
 });
+
+// The usage stream is only as good as the paths it observes. Three ways it used to lie:
+// a /slash invocation was never recorded (and a `disable-model-invocation` skill has no
+// other path, so the skills a human drives by hand all read zero); `taut check`'s own
+// enforcement probe was recorded as a real invocation of manifest.skills[0]; and every
+// sibling tool caught by the partial matcher wrote a row with no kind and no name.
+test('usage stream: the /slash path is counted, self-test probes are marked, nameless rows are not written', async () => {
+  const { ws } = await setup('tel-slash', {
+    harness: 'claude-code', kaut: false, skills: 'all', mcp: [], repos: [repoB], telemetry: 'extended',
+  });
+  const invokes = async () => (await readDay(ws)).rows.filter((r) => r.event === 'invoke');
+
+  // The payload shape is the harness's own, captured from a live UserPromptExpansion hook:
+  // routing arrives as explicit fields, not as text to be guessed at.
+  await runGate(ws, 'promptexpansion', {
+    session_id: 'sl', expansion_type: 'slash_command', command_name: 'fx-init',
+    command_args: 'TICKET-1 auto', prompt: '/fx-init TICKET-1 auto',
+  });
+  let rows = await invokes();
+  assert.equal(rows.length, 1, 'the slash path writes exactly one usage row');
+  assert.equal(rows[0].kind, 'skill');
+  assert.equal(rows[0].name, 'fx-init');
+  assert.equal(rows[0].managed, true);
+  assert.equal(rows[0].via, 'slash', 'the row says which path it came from');
+  assert.equal(rows[0].session_id, 'sl');
+
+  // Naming a skill is not using one. The integrity check above stays deliberately broad;
+  // the counter must not inherit that breadth or it invents usage out of prose.
+  await runGate(ws, 'promptexpansion', { session_id: 'sl', prompt: 'remind me what /fx-plan does' });
+  assert.equal((await invokes()).length, 1, 'a prompt that merely mentions a skill is not an invocation');
+
+  // Builtin commands share the event but are harness features, not toolchain artifacts.
+  await runGate(ws, 'promptexpansion', {
+    session_id: 'sl', expansion_type: 'slash_command', command_name: 'model', prompt: '/model opus',
+  });
+  assert.equal((await invokes()).length, 1, 'builtin slash commands are not artifacts');
+
+  // A plugin skill arrives namespaced; the artifact is still resolved by its bare name.
+  await runGate(ws, 'promptexpansion', {
+    session_id: 'sl', expansion_type: 'slash_command', command_name: 'someplugin:fx-plan', prompt: '/someplugin:fx-plan',
+  });
+  rows = await invokes();
+  assert.equal(rows.length, 2);
+  assert.equal(rows[1].name, 'fx-plan');
+
+  // The claude-code matcher is a partial match: TaskOutput/TaskStop reach the gate too and
+  // resolve to nothing worth recording.
+  await runGate(ws, 'pretooluse', { session_id: 'sl', tool_name: 'TaskOutput', tool_input: {} });
+  assert.equal((await invokes()).length, 2, 'a tool the gate cannot name writes no row');
+
+  // `taut check` runs this same gate out of band — its rows must say so.
+  await runGate(ws, 'pretooluse', { tool_name: 'Skill', tool_input: { skill: 'fx-plan' } }, [], { TAUT_PROBE: '1' });
+  rows = await invokes();
+  assert.equal(rows.length, 3);
+  assert.equal(rows[2].via, 'tool', 'the tool path is labelled too — absence of `via` dates a file, it does not mean idle');
+  assert.equal(rows[2].probe, true, 'an out-of-band probe is marked, never counted as use');
+  assert.ok(rows.slice(0, 2).every((r) => r.probe === undefined), 'real invocations carry no probe flag');
+
+  // Privacy law holds on the new path too.
+  const flat = JSON.stringify(await invokes());
+  assert.ok(!flat.includes('repo-beta') && !flat.includes(TMP), 'no repository names, no paths');
+});
+
+test('check: the live-gate self-test does not inflate the usage of manifest.skills[0]', async () => {
+  const { ws } = await setup('tel-probe', {
+    harness: 'claude-code', kaut: false, skills: 'all', mcp: [], repos: [repoB], telemetry: 'extended',
+  });
+  await run(process.execPath, [CLI, 'check', '--workspace', ws]);
+  const rows = (await readDay(ws)).rows.filter((r) => r.event === 'invoke');
+  assert.ok(rows.length > 0, 'the probe still records — enforcement evidence is kept');
+  assert.ok(rows.every((r) => r.probe === true), 'every row `taut check` produces is marked as a probe');
+});
+
+test('report: self-test probe rows are excluded from usage and friction, old files included', async () => {
+  const { ws } = await setup('tel-report-probe', {
+    harness: 'claude-code', kaut: false, skills: 'all', mcp: [], repos: [repoB],
+  });
+  // One real invocation, plus a marked probe pair (v0.7.2+) and an UNMARKED one written
+  // the way pre-0.7.2 engines did — recognizable only by the reserved name and the
+  // same-second allow-row the self-test always emits beside it.
+  await runGate(ws, 'pretooluse', { tool_name: 'Skill', tool_input: { skill: 'fx-plan' }, session_id: 'r1' });
+  await runGate(ws, 'pretooluse', { tool_name: 'Skill', tool_input: { skill: 'fx-init' } }, [], { TAUT_PROBE: '1' });
+  await fs.appendFile(path.join(telDir(ws), `${localDay()}.jsonl`),
+    '{"ts":"2026-01-01T10:00:00.000Z","event":"invoke","kind":"skill","name":"fx-init","decision":"allow","managed":true,"harness":"claude-code"}\n'
+    + '{"ts":"2026-01-01T10:00:00.900Z","event":"invoke","kind":"skill","name":"taut-check-foreign-probe","decision":"deny","cause":"strict-foreign","harness":"claude-code"}\n');
+
+  const out = await run(process.execPath, [CLI, 'report', '--workspace', ws, '--json']);
+  const d = JSON.parse(out.stdout);
+  assert.equal(d.usage.managedInvocations, 1, 'only the real invocation counts as usage');
+  assert.ok(d.usage.byName.some(([k]) => k === 'skill:fx-plan'));
+  assert.ok(!d.usage.byName.some(([k]) => k === 'skill:fx-init'), 'the probed skill is not credited with use');
+  assert.equal(d.usage.probes, 3, 'excluded probe rows are reported, not hidden');
+  assert.equal(d.friction.denies, 0, 'the reserved deny-probe is not counted as real friction');
+
+  const human = await run(process.execPath, [CLI, 'report', '--workspace', ws]);
+  assert.match(human.stdout, /self-test probe row\(s\) excluded/);
+});

@@ -133,3 +133,8 @@ export const FRAMEWORK_OWNED_NOTE =
   '(ticket memory, agent reports, telemetry) the framework never writes, rewrites, or ' +
   'deletes: it survives setup re-runs, update, repair, and even deleting the whole ' +
   'workspace folder and recompiling it.';
+
+// The reserved skill name `taut check` uses to prove the strict regime actually denies a
+// foreign artifact. Reserved: a real pack must never ship a skill under this name, and
+// telemetry readers recognize it as a self-test rather than as use.
+export const PROBE_NAME = 'taut-check-foreign-probe';

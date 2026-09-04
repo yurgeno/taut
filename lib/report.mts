@@ -8,6 +8,7 @@ import fs from 'node:fs/promises';
 import path from 'node:path';
 import process from 'node:process';
 
+import { PROBE_NAME } from './constants.mts';
 import { bold, dim, expandHome, fail, green, readIfExists, yellow } from './util.mts';
 import type { CliOpts } from './types.mts';
 
@@ -69,7 +70,18 @@ export async function cmdReport(opts: CliOpts): Promise<void> {
 
   const metas = rows.filter((r) => r.event === 'meta');
   const sessions = rows.filter((r) => r.event === 'session_start');
-  const invokes = rows.filter((r) => r.event === 'invoke');
+  // `taut check` proves the gate is live by running it OUT OF BAND, once per harness:
+  // an allow-probe against the first skill in the manifest and a deny-probe against a
+  // reserved name. Counted as usage, a routine self-test inflates whichever skill happens
+  // to sit first in the manifest and fills `friction` with denials nobody ever hit.
+  // Since v0.7.2 those rows say `probe: true`; older files are recognized by the reserved
+  // name and by the allow-row the same self-test wrote in the same second.
+  const allInvokes = rows.filter((r) => r.event === 'invoke');
+  const probeSeconds = new Set(allInvokes.filter((r) => r.name === PROBE_NAME).map((r) => String(r.ts ?? '').slice(0, 19)));
+  const isProbe = (r: any) => r.probe === true || r.name === PROBE_NAME
+    || (!r.session_id && probeSeconds.has(String(r.ts ?? '').slice(0, 19)));
+  const invokes = allInvokes.filter((r) => !isProbe(r));
+  const probes = allInvokes.length - invokes.length;
   const managedAllows = invokes.filter((r) => r.decision === 'allow' && r.managed === true);
   const foreignAllows = invokes.filter((r) => r.decision === 'allow' && r.managed !== true);
   const denies = invokes.filter((r) => r.decision === 'deny');
@@ -98,6 +110,7 @@ export async function cmdReport(opts: CliOpts): Promise<void> {
       byName: count(managedAllows, (r) => `${r.kind ?? '?'}:${r.name ?? '?'}`),
       byHarness: count(managedAllows, (r) => r.harness ?? '(unrecorded)'),
       foreignAllows: foreignAllows.length,
+      probes,
     },
     friction: {
       denies: denies.length,
@@ -126,7 +139,7 @@ export async function cmdReport(opts: CliOpts): Promise<void> {
     const l = data.lag[axis];
     if (l) p(`  ${dim(`lag:${axis}`)}${axis === 'data' ? '  ' : ''} last ${l.last} commit(s) behind, max ${l.max} ${dim(`(${l.samples} session sample(s))`)}`);
   }
-  p(`  ${dim('usage')}     ${managedAllows.length} managed invocation(s)${foreignAllows.length ? ` (+${foreignAllows.length} foreign allowed in normal mode)` : ''}${data.levels.includes('basic') ? dim(' · NOTE: basic level does not record allow-events') : ''}`);
+  p(`  ${dim('usage')}     ${managedAllows.length} managed invocation(s)${foreignAllows.length ? ` (+${foreignAllows.length} foreign allowed in normal mode)` : ''}${probes ? dim(` · ${probes} self-test probe row(s) excluded`) : ''}${data.levels.includes('basic') ? dim(' · NOTE: basic level does not record allow-events') : ''}`);
   if (data.usage.byName.length) p(`            ${dim(top(data.usage.byName, 12))}`);
   p(`  ${dim('friction')}  ${denies.length} deny(s)${denies.length ? ` ${dim(`· by cause: ${top(data.friction.byCause)}`)}` : ''}${blocks.length ? ` · ${blocks.length} prompt/expansion block(s)` : ''}${gateErrors ? ` · ${yellow(`${gateErrors} gate error(s)`)}` : ''}`);
   if (data.friction.deniedNames.length) p(`            ${dim(`denied: ${top(data.friction.deniedNames, 8)}`)}`);

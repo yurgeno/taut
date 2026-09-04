@@ -14,6 +14,7 @@ import path from 'node:path';
 import process from 'node:process';
 import type { ChildProcess, ExecSyncOptionsWithStringEncoding } from 'node:child_process';
 
+import { PROBE_NAME } from './constants.mts';
 import { bold, dim, exists, expandHome, fail, green, red, readIfExists, safeJoin, sha256, yellow } from './util.mts';
 import { createTelemetry } from '../gate/telemetry.mjs';
 import { normalizeLock } from './lock.mts';
@@ -70,7 +71,10 @@ function mcpHandshake(command: string, args: string[], env: NodeJS.ProcessEnv): 
 function runGateProbe(ws: string, harness: string, input: unknown): Promise<{ code: number | string; stdout: string }> {
   return new Promise((resolve) => {
     const child = execFile(process.execPath, [path.join(ws, '.taut', 'gate.mjs'), 'pretooluse', '--harness', harness],
-      { env: { ...process.env, CLAUDE_PROJECT_DIR: ws } },
+      // TAUT_PROBE marks the telemetry rows this self-test produces. Without it the probe's
+      // allow-row is indistinguishable from a real invocation of manifest.skills[0], and
+      // every `taut check` silently inflates that one skill's usage count.
+      { env: { ...process.env, CLAUDE_PROJECT_DIR: ws, TAUT_PROBE: '1' } },
       (err, stdout) => resolve({ code: err ? err.code ?? 1 : 0, stdout: stdout ?? '' }));
     child.stdin!.end(JSON.stringify(input));
   });
@@ -118,7 +122,7 @@ export async function cmdCheck(opts: CliOpts): Promise<void> {
   } else add('gate', 'warn', 'no skills installed — managed-allow probe skipped');
   if (lock.mode === 'strict') {
     for (const h of harnesses) {
-      const r = await runGateProbe(ws, h, { tool_name: 'Skill', tool_input: { skill: 'taut-check-foreign-probe' } });
+      const r = await runGateProbe(ws, h, { tool_name: 'Skill', tool_input: { skill: PROBE_NAME } });
       add('gate-strict', r.stdout.includes('"deny"') ? 'ok' : 'fail',
         r.stdout.includes('"deny"') ? `[${h}] strict regime enforced (foreign probe denied)`
           : `[${h}] STRICT mode recorded but the foreign probe was NOT denied — gate wiring broken (repair)`);

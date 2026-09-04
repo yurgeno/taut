@@ -50,10 +50,10 @@ export async function ensureFrameworkHistory(TMP) {
   CLI = path.join(clone, 'taut.mjs');
 }
 
-export function runGate(ws, event, inputObj, extraArgs = []) {
+export function runGate(ws, event, inputObj, extraArgs = [], extraEnv = {}) {
   return new Promise((resolve) => {
     const child = execFile(process.execPath, [path.join(ws, '.taut', 'gate.mjs'), event, ...extraArgs],
-      { env: { ...process.env, CLAUDE_PROJECT_DIR: ws } },
+      { env: { ...process.env, CLAUDE_PROJECT_DIR: ws, ...extraEnv } },
       (err, stdout, stderr) => resolve({ code: err ? err.code ?? 1 : 0, stdout, stderr }));
     child.stdin.end(JSON.stringify(inputObj ?? {}));
   });
