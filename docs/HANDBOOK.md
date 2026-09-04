@@ -256,6 +256,17 @@ register as using one. A harness that does not send routing fields records nothi
 this path rather than inventing a number. Rows the gate cannot name at all (sibling
 tools caught by a partial hook matcher) are not written.
 
+**Where a skill is invoked from differs per harness, and the gate follows.** A harness may
+offer a skill tool, a `/slash`, both, or neither. Where it offers neither, a skill is
+invoked by the model READING its `SKILL.md` — the harness lists the skills with their paths
+and the model opens the one it needs, so the read IS the invocation and arrives as an
+ordinary tool call. The gate records that too, stamped `via: 'read'`. That label matters:
+a read is weaker evidence than an explicit call — a session auditing its own skills reads
+them as well — and a reader who knows how a count was obtained can discount it. Detection
+is recording only: a command is never denied because a skill path appears inside it, and
+the detection is skipped entirely for tools that ARE skill or agent invocations, so it can
+never become a way around the strict gate.
+
 **Self-test rows are marked, never counted as use.** `taut check` proves the gate is
 live by running it out of band against the first skill in the manifest. Those rows carry
 `probe: true`; `taut report` excludes them from usage and friction and prints how many

@@ -188,6 +188,32 @@ try {
       // lives (workspace folder, user-global, plugin). An AGENT type outside the lock is
       // denied only when a workspace file backs it (a foreign local agent); a type with
       // no file is a harness BUILT-IN (general-purpose, Explore, ...) and stays allowed.
+      // Not every harness HAS a skill tool. On some, a skill is invoked by the model
+      // READING its SKILL.md: the harness lists the skills with their paths and the model
+      // opens the one it needs, so the read IS the invocation and it arrives as an ordinary
+      // tool call — invisible to the name check above. That is how an entire harness's skill
+      // usage can read zero while the skills are in daily use.
+      //
+      // Recorded, never gated: denying a command because a path appears inside it would
+      // change what runs, and a legitimate listing of the skills directory would start
+      // failing. Provenance is explicit — `via: 'read'` is weaker evidence than an explicit
+      // invocation (a session auditing its own skills reads them too), and a reader that
+      // knows how a count was obtained can discount it; one that cannot, cannot.
+      // Guarded to tools that are NOT a skill/agent invocation: an unlocked skill whose
+      // arguments happened to name a locked one must still reach the strict check below.
+      // Detection may never become a way around enforcement.
+      if (kind === null) {
+        const readBlob = JSON.stringify(ti ?? {});
+        const readSkills = [];
+        for (const a of lock.artifacts) {
+          const m = a.id.match(/skills\/([^/]+)\/SKILL\.md$/);
+          if (m && !readSkills.includes(m[1]) && readBlob.includes(skillArtifact(m[1]))) readSkills.push(m[1]);
+        }
+        for (const n of readSkills)
+          logUsage({ ts, event: 'invoke', kind: 'skill', name: n, decision: 'allow', managed: true, via: 'read', harness: HARNESS, session_id: sid });
+        if (readSkills.length) process.exit(0);
+      }
+
       const foreignAgentFile = kind === 'agent' && name && fs.existsSync(path.join(WS, agentArtifact(name)));
       if (strict && (kind === 'skill' || foreignAgentFile) && name) {
         logUsage({ ts, event: 'invoke', kind, name, decision: 'deny', cause: 'strict-foreign', harness: HARNESS, session_id: sid });

@@ -279,3 +279,52 @@ test('report: self-test probe rows are excluded from usage and friction, old fil
   const human = await run(process.execPath, [CLI, 'report', '--workspace', ws]);
   assert.match(human.stdout, /self-test probe row\(s\) excluded/);
 });
+
+// Not every harness has a skill tool. Measured on codex 0.153.0: its hook surface carries
+// no prompt-expansion event at all (`pre_tool_use, permission_request, post_tool_use,
+// pre_compact, post_compact, session_start, session_end, user_prompt_submit,
+// subagent_start, subagent_stop, interrupt`), a slash-prefixed prompt reaches
+// UserPromptSubmit as literal text, and a skill is invoked by the model READING its
+// SKILL.md through the shell tool. That read is an ordinary tool call, so the whole
+// harness's skill usage was invisible.
+test('usage stream: a skill invoked by READING its SKILL.md is counted, and detection never bypasses enforcement', async () => {
+  const { ws } = await setup('tel-read', {
+    harness: 'codex', kaut: false, skills: 'all', mcp: [], repos: [repoB], telemetry: 'extended', mode: 'strict',
+  });
+  const invokes = async () => (await readDay(ws)).rows.filter((r) => r.event === 'invoke');
+
+  // The real shape, taken from a recorded codex session: a shell call whose command reads
+  // the skill file among other things.
+  await runGate(ws, 'pretooluse', {
+    session_id: 'rd', tool_name: 'exec',
+    tool_input: { cmd: "pwd && sed -n '1,240p' .agents/skills/fx-plan/SKILL.md && rg --files .taut/repos" },
+  });
+  let rows = await invokes();
+  assert.equal(rows.length, 1, 'the read is the invocation on a harness with no skill tool');
+  assert.equal(rows[0].name, 'fx-plan');
+  assert.equal(rows[0].kind, 'skill');
+  assert.equal(rows[0].via, 'read', 'weaker evidence than an explicit call — and labelled as such');
+  assert.equal(rows[0].managed, true);
+
+  // One call reading two skills counts each once; a bare directory listing counts nothing.
+  await runGate(ws, 'pretooluse', {
+    session_id: 'rd', tool_name: 'exec',
+    tool_input: { cmd: 'cat .agents/skills/fx-init/SKILL.md .agents/skills/fx-task/SKILL.md .agents/skills/fx-init/SKILL.md' },
+  });
+  rows = await invokes();
+  assert.equal(rows.length, 3);
+  assert.deepEqual(rows.slice(1).map((r) => r.name).sort(), ['fx-init', 'fx-task'], 'each skill once per call');
+
+  await runGate(ws, 'pretooluse', { session_id: 'rd', tool_name: 'exec', tool_input: { cmd: 'rg --files .agents/skills' } });
+  assert.equal((await invokes()).length, 3, 'listing the skills directory is not using a skill');
+
+  // The detection must not become a hole in the gate: a FOREIGN skill invoked by name is
+  // still denied even when its arguments happen to mention a managed skill's path.
+  const r = await runGate(ws, 'pretooluse', {
+    session_id: 'rd', tool_name: 'Skill',
+    tool_input: { skill: 'rogue-skill', hint: '.agents/skills/fx-plan/SKILL.md' },
+  });
+  assert.match(r.stdout, /"deny"/, 'strict enforcement is reached, not short-circuited by the read path');
+  const denied = (await invokes()).filter((x) => x.decision === 'deny');
+  assert.equal(denied.at(-1).name, 'rogue-skill');
+});
