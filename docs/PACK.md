@@ -50,6 +50,8 @@ model ladder (the rung whose `models["claude-code"]` equals the pin supplies
 `provider/model` format). `effort:` pins pass through for Claude Code.
 Recorded degradation: Claude Code frontmatter tool allowlists are informational on
 Codex — put the methodology in the body.
+Codex does honour a per-agent `sandbox_mode`: declare it as deployment values in the
+`manifest.agentSandbox` block (§6.3) — agent sources carry no taut frontmatter.
 
 ## 3. Capability markers — conditional compilation
 
@@ -178,6 +180,12 @@ The engine treats these as opaque values except at the named seams:
   human[], extends}`). SEAM: each generates an `up-<name>` wrapper skill over the
   installed skill declaring `metadata.taut.role: stack-engine`; the wrapper points at
   the stack's runbook; a stack whose runbook is excluded generates NO wrapper (warned).
+- `agentSandbox` — `{"<agent>": "read-only" | "workspace-write"}`. SEAM: renders as that
+  agent's `sandbox_mode` in its Codex TOML — the mechanical form of a read-only promise the
+  dropped `tools:` allowlist cannot carry there. It only narrows: an unknown agent or any
+  other mode (`danger-full-access` included) fails the compile; agents left out inherit
+  the session sandbox. Read-only also means NO network — keep agents that call a CLI over
+  the network (an SCM client, say) out of it.
 - `modelTiers` — the MODEL PROFILE (§8). SEAMS: `sessionTier` renders into harness
   configs + the lock; the ladder maps agent pins into Codex TOML; single-harness
   compiles add flat per-rung values.
@@ -218,13 +226,11 @@ remains the compile-time authority, §3).
 { "sessionTier": "frontier",
   "ladder": [
     { "tier": "cheap",    "useWhen": "mechanical work",
-      "models": { "claude-code": "haiku", "codex": "gpt-5.6-luna" },
-      "reasoningEffort": { "claude-code": "low", "codex": "low" } },
+      "models": { "claude-code": "haiku", "codex": "gpt-6-luna" },
+      "reasoningEffort": { "codex": "low" } },
     { "tier": "frontier", "useWhen": "high-stakes reasoning; the session default",
-      "models": { "claude-code": "opus", "codex": "gpt-5.6" },
-      "reasoningEffort": { "claude-code": "high", "codex": "high" } },
-    { "tier": "frontier-wide", "useWhen": "whole-landscape synthesis — deliberate escalation only",
-      "models": { "claude-code": "opus[1m]", "codex": "gpt-5.6" } } ],
+      "models": { "claude-code": "opus", "codex": "gpt-6-sol" },
+      "reasoningEffort": { "claude-code": "high", "codex": "high" } } ],
   "rolePolicy": { "frontier": ["repo-implementer"], "cheap": ["compliance-auditor"] } }
 ```
 
@@ -232,8 +238,12 @@ remains the compile-time authority, §3).
   `.claude/settings.json` (`model`/`effortLevel`) and `.codex/config.toml`
   (`model`/`model_reasoning_effort`), lands in the lock, and powers the gate's
   session-start advisory. An unknown tier fails the compile.
-- Context width is part of the model string (`opus` vs `opus[1m]`); Codex context is
-  not a configurable axis.
+- Context width is part of the model string (`opus` vs `opus[1m]`) where a model still
+  needs the `[1m]` variant; current Opus/Sonnet/Fable run a 1M window natively. Codex
+  context is not a configurable axis.
+- A Claude Code subagent without an `effort:` pin inherits the SESSION effort, so a
+  rung's `reasoningEffort["claude-code"]` documents intent unless the agent pins it; a
+  model that takes no effort setting (Haiku) should carry none.
 - `rolePolicy` is the declarative agent-role → tier mapping; keep it in step with the
   agent frontmatter pins (the pins are what enforce).
 - With ONE harness enabled the manifest also gets flat `model`/`reasoningEffort` per

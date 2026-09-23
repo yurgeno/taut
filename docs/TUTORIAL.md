@@ -180,13 +180,13 @@ The block that answers "which model, which effort, which context width, for what
   "sessionTier": "frontier",                  // the ORCHESTRATOR session's tier
   "ladder": [
     { "tier": "cheap",    "useWhen": "mechanical work",
-      "models": { "claude-code": "haiku",  "codex": "gpt-5.6-luna"  },
+      "models": { "claude-code": "haiku",  "codex": "gpt-6-luna"    },
       "reasoningEffort": { "claude-code": "low",    "codex": "low"    } },
     { "tier": "mid",      "useWhen": "bounded analysis",
-      "models": { "claude-code": "sonnet", "codex": "gpt-5.6-terra" },
+      "models": { "claude-code": "sonnet", "codex": "gpt-6-sol"     },
       "reasoningEffort": { "claude-code": "medium", "codex": "medium" } },
     { "tier": "frontier", "useWhen": "writing and reviewing code; the SESSION default",
-      "models": { "claude-code": "opus",   "codex": "gpt-5.6"       },
+      "models": { "claude-code": "opus",   "codex": "gpt-6-sol"     },
       "reasoningEffort": { "claude-code": "high",   "codex": "high"   } }
   ],
   "rolePolicy": { "frontier": ["implementer", "reviewer"], "mid": ["analyst"] }
@@ -197,21 +197,21 @@ What the compiler does with it:
 
 - `sessionTier` → `.claude/settings.json` gets `"model": "opus"` +
   `"effortLevel": "high"` (workspace settings beat the user's saved default);
-  `.codex/config.toml` gets `model = "gpt-5.6"` + `model_reasoning_effort = "high"`.
+  `.codex/config.toml` gets `model = "gpt-6-sol"` + `model_reasoning_effort = "high"`.
   The gate's session-start banner flags a live session running something else.
 - Agent pins map ACROSS harnesses: `analyst` pins `model: sonnet`; the ladder rung
   whose `models["claude-code"]` is `sonnet` supplies the Codex TOML its
-  `gpt-5.6-terra` + `medium`.
-- A wider-context tier is just a model string: add a rung with
-  `"claude-code": "opus[1m]"` for whole-landscape work, marked "deliberate escalation
-  only" in its `useWhen`.
+  `gpt-6-sol` + `medium` (one Codex model, two efforts — a rung is a model AND an effort).
+- A wider-context tier is just a model string (`"claude-code": "opus[1m]"`) — but only
+  for models that do not already run a 1M window: current Opus, Sonnet and Fable do, so
+  such a rung would equal the frontier one. Add it only when your model needs it.
 - `rolePolicy` is declarative documentation of role → tier; the PINS enforce.
 
 Model ids are pack VALUES passed through verbatim — the compiler validates none of
 them. The ones above are the current ids of the two shipped adapters (Claude Code:
 [model config](https://code.claude.com/docs/en/model-config.md); Codex: [subagent
 configuration](https://learn.chatgpt.com/docs/agent-configuration/subagents), both
-checked 2026-08-15). Model line-ups move — when you build your own pack, put in the
+checked 2026-09-23; the GPT-6 ids need Codex CLI 0.156.1 or newer). Model line-ups move — when you build your own pack, put in the
 ids your harness offers you today.
 
 ## 6. The runbook — `runbooks/dev-server.md`

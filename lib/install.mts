@@ -8,14 +8,14 @@ import type { Stats } from 'node:fs';
 
 import { ENV_HELP, FW_ROOT, HARNESSES, MCP_CATALOG, requireData } from './constants.mts';
 import { exists, fail, readIfExists, sha256 } from './util.mts';
-import { neededAgents } from './artifacts.mts';
+import { neededAgents, parseFrontmatter } from './artifacts.mts';
 import { applyMarkers, withLegacyGates } from './markers.mts';
 import { buildManifest, installedFlowDocs } from './manifest.mts';
 import { resolveRepoStacks } from './stacks.mts';
 import {
   renderClaudeSettings, renderCodexAgentToml, renderCodexConfigToml, renderCodexHooksToml,
   renderInstructions, renderMcpJson, renderMcpServersSpec, renderOpencodeAgentMd,
-  renderOpencodeJson, renderStackSkill, renderUiShim,
+  renderOpencodeJson, renderStackSkill, renderUiShim, validateAgentSandbox,
 } from './render.mts';
 import type { ArtifactRow, Cfg, MemberFile } from './types.mts';
 
@@ -120,7 +120,7 @@ async function copyArtifact(list: ArtifactRow[], ws: string, rel: string, source
 // docs-MCP-less workspace must not name context7 tools. The lock entry records
 // `transform: 'gates'`; `verify --source` re-applies the same pass at the pinned commit
 // (gate values reconstructed from the lock itself).
-async function copyGated(list: ArtifactRow[], ws: string, rel: string, sourceAbs: string, gates: Record<string, boolean>): Promise<void> {
+async function copyGated(list: ArtifactRow[], ws: string, rel: string, sourceAbs: string, gates: Record<string, boolean>): Promise<string> {
   assertNotInstanceData(rel);
   const ref = srcRef(sourceAbs);
   let text: string;
@@ -131,6 +131,7 @@ async function copyGated(list: ArtifactRow[], ws: string, rel: string, sourceAbs
   const buf = Buffer.from(text);
   await fs.writeFile(target, buf);
   list.push({ id: rel, ...ref, transform: 'gates', sha256: sha256(buf) });
+  return text;
 }
 
 // The gate values a config implies. Kept in ONE place — verify derives the same set from
@@ -146,11 +147,15 @@ export function capabilityGates(cfg: Cfg): Record<string, boolean> {
   });
 }
 
+// Agent Skills specification limit for a SKILL.md `description` (agentskills.io/specification).
+export const DESCRIPTION_MAX = 1024;
+
 export async function install(cfg: Cfg): Promise<ArtifactRow[]> {
   const ws = cfg.workspace;
   const artifacts: ArtifactRow[] = [];
   const catalog = cfg.catalog;
   const agents = neededAgents(cfg.skills, catalog);
+  validateAgentSandbox(cfg, catalog.agents.keys());
   // Canonical HARNESSES order (not answers order) keeps the artifact list — and the
   // lock — deterministic.
   const targets = HARNESSES.filter((h) => cfg.harnesses.includes(h));
@@ -204,6 +209,7 @@ export async function install(cfg: Cfg): Promise<ArtifactRow[]> {
   // permission), and the gate as an auto-loaded .opencode/plugins/ plugin. The trees are
   // otherwise disjoint by construction, so the union is conflict-free.
   const seen = new Set<string>();
+  const longDesc = new Set<string>();
   for (const h of targets) {
     const forCodex = h === 'codex';
     const forOpencode = h === 'opencode';
@@ -213,7 +219,14 @@ export async function install(cfg: Cfg): Promise<ArtifactRow[]> {
       const id = `${skillsBase}/${s}/SKILL.md`;
       if (seen.has(id)) continue; // shared tree, identical content — already installed
       seen.add(id);
-      await copyGated(artifacts, ws, id, src.path, gates);
+      const text = await copyGated(artifacts, ws, id, src.path, gates);
+      // Agent Skills caps `description` at 1024 characters; today's loaders accept more,
+      // a stricter one (or a Skills API upload) would drop or reject the skill.
+      const desc = parseFrontmatter(text, id).fm.description;
+      if (typeof desc === 'string' && [...desc].length > DESCRIPTION_MAX && !longDesc.has(s)) {
+        longDesc.add(s);
+        (cfg.warnings ??= []).push(`skill "${s}": description is ${[...desc].length} characters — the Agent Skills limit is ${DESCRIPTION_MAX}; shorten it in the pack (lead with when to use it)`);
+      }
     }
     for (const [sname, stack] of wrapperStacks) {
       const id = `${skillsBase}/up-${sname}/SKILL.md`;
@@ -238,8 +251,15 @@ export async function install(cfg: Cfg): Promise<ArtifactRow[]> {
       if (cfg.mcp.length) await writeArtifact(artifacts, ws, '.mcp.json', renderMcpJson(cfg));
       await writeArtifact(artifacts, ws, '.claude/settings.json', renderClaudeSettings(cfg));
     }
-    if (forCodex) await writeArtifact(artifacts, ws, '.codex/config.toml',
-      renderCodexConfigToml(cfg) + renderCodexHooksToml());
+    if (forCodex) {
+      // Codex trusts project hooks per hash and silently SKIPS a changed one until it is
+      // re-approved — a rewired gate would be off without a word. Say so at compile time.
+      const hooks = renderCodexHooksToml();
+      const prev = await readIfExists(path.join(ws, '.codex', 'config.toml'));
+      if (prev !== null && !prev.includes(hooks))
+        (cfg.warnings ??= []).push('codex: the gate hooks in .codex/config.toml changed — Codex skips changed project hooks until approved; open Codex in this workspace and approve them with /hooks before working');
+      await writeArtifact(artifacts, ws, '.codex/config.toml', renderCodexConfigToml(cfg) + hooks);
+    }
     if (forOpencode) {
       await writeArtifact(artifacts, ws, 'opencode.json', renderOpencodeJson(cfg));
       await copyArtifact(artifacts, ws, '.opencode/plugins/taut-gate.js', path.join(FW_ROOT, 'gate', 'opencode-plugin.mjs'));

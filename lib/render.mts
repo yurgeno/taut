@@ -9,6 +9,7 @@ import path from 'node:path';
 import { FRAMEWORK_OWNED_NOTE, MCP_CATALOG, langName } from './constants.mts';
 import { stageChain } from './artifacts.mts';
 import { buildManifest, installedFlowDocs, rungEffort, sessionRung } from './manifest.mts';
+import { fail } from './util.mts';
 import type { Cfg, RepoDocFile } from './types.mts';
 
 // Every MCP server launches through the workspace's OWN launcher (.taut/mcp-launch.mjs):
@@ -184,6 +185,32 @@ export function renderCodexHooksToml(): string {
   ].join('\n');
 }
 
+// Per-agent Codex sandbox, declared as deployment VALUES (`manifest.agentSandbox`:
+// {"<agent>": "read-only" | "workspace-write"}) because agent sources carry no taut
+// frontmatter. It only ever NARROWS: `danger-full-access` is refused, and an agent left
+// out inherits the session sandbox exactly as before. It is the mechanical stand-in for
+// the `tools:` allowlist the TOML format cannot express.
+export const AGENT_SANDBOX_MODES = ['read-only', 'workspace-write'];
+
+export function agentSandboxMode(cfg: Cfg, name: string): string | undefined {
+  const v = cfg.profile?.manifest?.agentSandbox?.[name];
+  return typeof v === 'string' ? v : undefined;
+}
+
+export function validateAgentSandbox(cfg: Cfg, knownAgents: Iterable<string>): void {
+  const decl = cfg.profile?.manifest?.agentSandbox;
+  if (decl === undefined) return;
+  if (typeof decl !== 'object' || decl === null || Array.isArray(decl))
+    fail('agentSandbox must be an object {"<agent>": "read-only" | "workspace-write"}');
+  const known = new Set(knownAgents);
+  for (const [agent, mode] of Object.entries(decl)) {
+    if (agent === '$comment') continue;
+    if (!known.has(agent)) fail(`agentSandbox names unknown agent "${agent}" (agents: ${[...known].sort().join(', ') || 'none'})`);
+    if (!AGENT_SANDBOX_MODES.includes(mode as string))
+      fail(`agentSandbox "${agent}": "${String(mode)}" is not one of ${AGENT_SANDBOX_MODES.join(' | ')} (a pack may only narrow the sandbox)`);
+  }
+}
+
 export function renderCodexAgentToml(name: string, sourceMd: string, cfg: Cfg): string {
   // Codex subagent role file (.codex/agents/<name>.toml). The agent's Claude model pin is
   // mapped to a Codex model via the deployment config's modelTiers ladder
@@ -198,10 +225,12 @@ export function renderCodexAgentToml(name: string, sourceMd: string, cfg: Cfg): 
   const rung = cfg.profile?.manifest?.modelTiers?.ladder?.find((r: any) => r.models?.['claude-code'] === pin);
   const model = rung?.models?.codex;
   const effort = rungEffort(rung, 'codex');
+  const sandbox = agentSandboxMode(cfg, name);
   return `name = "${name}"\n` +
     `description = "TAUT ${name} subagent (compiled from framework source; methodology below)"\n` +
     (model ? `model = "${model}"\n` : '') +
     (model && effort ? `model_reasoning_effort = "${effort}"\n` : '') +
+    (sandbox ? `sandbox_mode = "${sandbox}"\n` : '') +
     `developer_instructions = '''\n${body}'''\n`;
 }
 

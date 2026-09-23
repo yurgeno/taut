@@ -27,19 +27,19 @@
         {
           "tier": "cheap",
           "useWhen": "mechanical work - file moves, catalog reads, formatting",
-          "models": { "claude-code": "haiku", "codex": "gpt-5.6-luna" },
+          "models": { "claude-code": "haiku", "codex": "gpt-6-luna" },
           "reasoningEffort": { "claude-code": "low", "codex": "low" }
         },
         {
           "tier": "mid",
           "useWhen": "bounded analysis over known structure - reading the task, mapping the change surface",
-          "models": { "claude-code": "sonnet", "codex": "gpt-5.6-terra" },
+          "models": { "claude-code": "sonnet", "codex": "gpt-6-sol" },
           "reasoningEffort": { "claude-code": "medium", "codex": "medium" }
         },
         {
           "tier": "frontier",
           "useWhen": "writing and reviewing code; the SESSION default",
-          "models": { "claude-code": "opus", "codex": "gpt-5.6" },
+          "models": { "claude-code": "opus", "codex": "gpt-6-sol" },
           "reasoningEffort": { "claude-code": "high", "codex": "high" }
         }
       ],

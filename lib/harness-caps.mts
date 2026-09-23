@@ -57,7 +57,8 @@ export const HARNESS_CAPS: Record<string, HarnessAdapter> = {
     mcpToolNaming: 'mcp__{server}__{tool}',
     degradations: [
       { id: 'codex-skill-allowlist', text: 'Claude-Code frontmatter tool allowlists are informational here.' },
-      { id: 'codex-agent-tools', text: 'A subagent `tools:` allowlist has no TOML counterpart and is dropped on render — the body carries the methodology.' },
+      { id: 'codex-agent-tools', text: 'A subagent `tools:` allowlist has no TOML counterpart and is dropped on render — the body carries the methodology; a deployment `agentSandbox` value renders as that agent\'s `sandbox_mode` (mechanical read-only where declared).' },
+      { id: 'codex-hook-trust', text: 'Codex runs the project gate hooks only once this workspace\'s `.codex/` layer is trusted, and skips a hook whose command changed until it is approved again (`/hooks`) — after an update that rewires the gate, approve the hooks before working.' },
     ],
   },
   opencode: {

@@ -268,9 +268,9 @@ test('react-demo (the tutorial project) compiles end-to-end: multi-harness, prof
   assert.equal(settings.model, 'opus');
   assert.equal(settings.effortLevel, 'high');
   const toml = await fs.readFile(path.join(ws, '.codex', 'config.toml'), 'utf8');
-  assert.match(toml, /^model = "gpt-5\.6"$/m);
+  assert.match(toml, /^model = "gpt-6-sol"$/m);
   const analystToml = await fs.readFile(path.join(ws, '.codex', 'agents', 'analyst.toml'), 'utf8');
-  assert.match(analystToml, /^model = "gpt-5\.6-terra"$/m);
+  assert.match(analystToml, /^model = "gpt-6-sol"$/m);
   assert.match(analystToml, /^model_reasoning_effort = "medium"$/m);
 
   // Project-level LAWS override the pack-level ones in the generated instructions.
@@ -694,4 +694,63 @@ test('repo-scaffold: auto-init of missing descriptors — skeleton into the pack
   await assert.rejects(run(process.execPath, [CLI, 'repo-scaffold', '--pack', '--workspace', wsNone]), /project-scoped/);
   const sNone = await run(process.execPath, [CLI, 'repo-scaffold', '--workspace', wsNone]);
   assert.match(sNone.stdout, /nothing to scaffold|scaffolded/, 'default mode needs no deployment');
+});
+
+test('agentSandbox: a declared agent renders sandbox_mode into its Codex TOML; undeclared agents inherit', async () => {
+  const sbxPack = await makePack(path.join(TMP, 'pack-sandbox'));
+  const depPath = path.join(sbxPack, 'fxdep', 'deployment.json');
+  const dep = JSON.parse(await fs.readFile(depPath, 'utf8'));
+  dep.manifest.agentSandbox = { $comment: 'values only', 'fx-qa': 'read-only' };
+  await fs.writeFile(depPath, JSON.stringify(dep, null, 2));
+  // A description over the Agent Skills limit compiles, with a warning naming the skill.
+  const initPath = path.join(sbxPack, 'skills', 'fx-init', 'SKILL.md');
+  const init = await fs.readFile(initPath, 'utf8');
+  await fs.writeFile(initPath, init.replace(
+    "description: 'Stage 1 of the fx flow: read the tracker issue and write the intake report.'",
+    `description: 'Stage 1 of the fx flow: read the tracker issue and write the intake report. ${'x'.repeat(1100)}'`));
+  await commitAll(sbxPack, 'agent sandbox + long description');
+  const root = path.join(TMP, 'profroot');
+  const repos = [path.join(root, 'repo-core'), path.join(root, 'repo-svc')];
+  const { ws, stdout } = await setup('sandbox-codex', {
+    deployment: 'fxdep', harnesses: ['claude-code', 'codex'], kaut: false, skills: 'all', mcp: [], repos, data: sbxPack,
+  });
+  const qa = await fs.readFile(path.join(ws, '.codex', 'agents', 'fx-qa.toml'), 'utf8');
+  assert.match(qa, /^sandbox_mode = "read-only"$/m);
+  const impl = await fs.readFile(path.join(ws, '.codex', 'agents', 'fx-implementer.toml'), 'utf8');
+  assert.doesNotMatch(impl, /sandbox_mode/, 'an undeclared agent keeps inheriting the session sandbox');
+  const ccQa = await fs.readFile(path.join(ws, '.claude', 'agents', 'fx-qa.md'), 'utf8');
+  assert.doesNotMatch(ccQa, /sandbox/, 'the Claude Code agent source is untouched');
+  const { stdout: st } = await run(process.execPath, [CLI, 'status', '--workspace', ws, '--json']);
+  const ids = JSON.parse(st).degradations.codex.map((d) => d.id);
+  assert.ok(ids.includes('codex-agent-tools') && ids.includes('codex-hook-trust'), 'the registry surfaces both codex records');
+  assert.match(stdout, /skill "fx-init": description is \d{4} characters — the Agent Skills limit is 1024/);
+  assert.equal((stdout.match(/skill "fx-init": description is/g) ?? []).length, 1, 'warned once, not per harness tree');
+  await run(process.execPath, [CLI, 'verify', '--workspace', ws]);
+
+  // A rewired gate hook is announced: Codex skips a changed hook until it is re-approved.
+  const cfgPath = path.join(ws, '.codex', 'config.toml');
+  await fs.writeFile(cfgPath, (await fs.readFile(cfgPath, 'utf8')).replace('pretooluse --harness codex', 'pretooluse --harness codex --old'));
+  const { stdout: again } = await run(process.execPath, [CLI, 'repair', '--workspace', ws]);
+  assert.match(again, /gate hooks in \.codex\/config\.toml changed — Codex skips changed project hooks until approved/);
+  const { stdout: quiet } = await run(process.execPath, [CLI, 'repair', '--workspace', ws]);
+  assert.doesNotMatch(quiet, /gate hooks in \.codex\/config\.toml changed/, 'no warning when the hooks are unchanged');
+});
+
+test('agentSandbox: an unknown agent or a widening mode fails the compile', async () => {
+  const root = path.join(TMP, 'profroot');
+  const repos = [path.join(root, 'repo-core'), path.join(root, 'repo-svc')];
+  for (const [name, decl, err] of [
+    ['sbx-unknown', { 'no-such-agent': 'read-only' }, /agentSandbox names unknown agent "no-such-agent"/],
+    ['sbx-wide', { 'fx-qa': 'danger-full-access' }, /"danger-full-access" is not one of read-only \| workspace-write/],
+  ]) {
+    const pack = await makePack(path.join(TMP, `pack-${name}`));
+    const depPath = path.join(pack, 'fxdep', 'deployment.json');
+    const dep = JSON.parse(await fs.readFile(depPath, 'utf8'));
+    dep.manifest.agentSandbox = decl;
+    await fs.writeFile(depPath, JSON.stringify(dep, null, 2));
+    await commitAll(pack, name);
+    await assert.rejects(setup(name, {
+      deployment: 'fxdep', harness: 'codex', kaut: false, skills: 'all', mcp: [], repos, data: pack,
+    }), err);
+  }
 });
