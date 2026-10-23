@@ -98,10 +98,11 @@ test('draft skill: banner in every harness tree, manifest/lock/instructions mark
   assert.ok(!/SOURCE-DRIFT .*fx-draft/.test(src.stdout), `verify --source must re-derive the banner:\n${src.stdout}`);
   assert.match(src.stdout, /source-check: \d+\/\d+ copy artifact\(s\) match the pin/);
 
-  // `check` surfaces the drafts as a warning, never a failure.
-  const chk = await run(process.execPath, [CLI, 'check', '--workspace', ws]);
-  assert.match(chk.stdout, /DRAFT skill\(s\) installed — not approved for production use, run at your own risk: fx-draft/);
-  assert.match(chk.stdout, /READY/);
+  // `check` surfaces the drafts as a WARNING row, never a failure. The command's exit code is
+  // not judged here: its MCP handshakes need the servers' runners (uvx, npx) on PATH, which a
+  // CI runner may lack — that is the fixture's environment, not the draft flag.
+  const chk = await run(process.execPath, [CLI, 'check', '--workspace', ws]).catch((e) => e);
+  assert.match(chk.stdout, /! draft\s+1 DRAFT skill\(s\) installed — not approved for production use, run at your own risk: fx-draft/);
 
   // `render` previews the same bytes the installer wrote.
   const prev = await run(process.execPath, [CLI, 'render', '--skill', 'fx-draft', '--harness', 'claude-code', '--json', '--data', PACK]);
