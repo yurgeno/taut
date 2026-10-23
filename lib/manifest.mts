@@ -73,6 +73,11 @@ export function installedFlowDocs(cfg: Cfg): FlowDocEntry[] {
   return cfg.catalog.flowDocs.filter((f) => f.sequence.some((s) => cfg.skills.includes(s)));
 }
 
+// Installed skills the pack marks `draft` (metadata.taut.maturity) — the ONE derivation
+// every surface reads (banner, manifest, lock, instructions, status, check, panel).
+export const draftSkills = (cfg: Pick<Cfg, 'skills' | 'catalog'>): string[] =>
+  cfg.skills.filter((s) => cfg.catalog.skills.get(s)?.meta.maturity === 'draft');
+
 export function buildManifest(cfg: Cfg): Record<string, any> {
   // Shared manifest: canonical, machine-independent, secret-free. Paths live in local
   // binding. With a deployment profile the manifest is generated AS FULLY AS the profile
@@ -137,12 +142,16 @@ export function buildManifest(cfg: Cfg): Record<string, any> {
       description: f.description,
       doc: `.taut/docs/FLOW-${f.name}.md`,
       stages: f.sequence.filter((s) => cfg.skills.includes(s)),
+      ...(f.maturity ? { maturity: f.maturity } : {}),
     })),
     skills: cfg.skills,
     skillsSelection: cfg.skillsSelection ?? 'custom',
     // "all minus exclusions" (apply toggles): an excluded skill never installs, but the
     // "all" selection keeps following new framework versions for everything else.
     skillsExcluded: cfg.skillsExcluded ?? [],
+    // Installed skills shipped as DRAFT — not approved for production use; each prints a
+    // notice on invocation (banner in the body + the gate's system message).
+    skillsDraft: draftSkills(cfg),
     agents: neededAgents(cfg.skills, cfg.catalog),
     mcp: Object.fromEntries(cfg.mcp.map((id) => {
       const c = MCP_CATALOG[id];

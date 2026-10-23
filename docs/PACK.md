@@ -34,7 +34,21 @@ metadata:
                               # the mcp-docs gate follows the servers actually installed
     repos: [repo-core]        # repo bindings → repo-map lint (see §7)
     role: stack-engine        # content role: stack-engine | spa-mock | knowledge
+    maturity: draft           # DRAFT: shipped for evaluation, not approved for
+                              # production — see "Draft artifacts" below
 ```
+
+**Draft artifacts.** `maturity: draft` (the only value; absent = stable, anything else
+fails the compile) ships the skill exactly as written, plus a fixed banner the compiler
+inserts right after the frontmatter: the skill tells the model to print one notice to the
+user FIRST ("… is a DRAFT skill — not yet approved for production use; you run it at your
+own risk"), then continues. The flag is also DATA on every surface the engine owns: the
+manifest (`skillsDraft`), the lock (`draft` — the gate prints the same notice as a hook
+`systemMessage` on every invocation, tool path and direct `/slash` alike), CLAUDE.md /
+AGENTS.md (`(draft)` tags + a paragraph), `status`, `check` (a warning, never a failure)
+and the panel (badge + chip). Nothing is blocked; the flag only makes "use at your own
+risk" impossible to miss. A flow doc takes the same key (§4); a draft flow sequencing a
+stable skill, or the reverse, compiles with a warning.
 
 Skills install verbatim (byte-copied) into every enabled harness's native tree after
 the capability-marker pass (§3). A skill named by nothing still installs — skills are
@@ -95,7 +109,10 @@ Marker lines never ship.
   project-folder LAWS.md OVERRIDES the shared one.
 - `FLOW-<name>.md` — a flow is nothing but a DOCUMENTED launch order. Frontmatter
   `sequence: [fx-task, fx-init, …]`; the doc ships when its sequence touches an
-  installed skill, and the manifest indexes the installed stages.
+  installed skill, and the manifest indexes the installed stages. Optional
+  `maturity: draft` marks the whole flow as under evaluation (§1 "Draft artifacts"):
+  the manifest's `flowDocs[]` entry and the instructions file carry the tag; mark the
+  flow's skills draft as well, or the compile warns about the mismatch.
 - Any other `*.md` ships to every workspace as `.taut/docs/<name>`.
 
 ## 5. MCP catalog — `catalog/mcp.json`

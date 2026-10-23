@@ -469,6 +469,8 @@ function render() {
   b += bd("selection: " + esc(state.skillsSelection), state.skillsSelection === "all"
     ? "skill-selection intent ALL: updates auto-install newly shipped skills (minus your explicit exclusions)"
     : "skill-selection intent CUSTOM: the installed set stays fixed; new skills are only advertised on update");
+  if ((state.skillsDraft || []).length) b += bd(state.skillsDraft.length + " draft",
+    "DRAFT skill(s) installed — shipped for evaluation, NOT approved for production use; whoever runs one does so at their own risk (a notice prints on each invocation): " + state.skillsDraft.join(", "), "warn");
   $("badges").innerHTML = b;
 
   var fwBehind = fw.behind > 0 ? fw.behind : 0;
@@ -543,6 +545,7 @@ function render() {
       + '<span class="meta">';
     if (s.blocked) sh += '<span class="reason">' + esc(s.blocked) + "</span>";
     if (s.excluded) sh += '<span class="chip excl">excluded</span>';
+    if (s.draft) sh += '<span class="chip excl" title="DRAFT: not approved for production use — run at your own risk">draft</span>';
     if (s.origin !== "framework") sh += '<span class="chip proj">project</span>';
     if (s.agents.length) sh += '<span class="chip" title="agents: ' + esc(s.agents.join(", ")) + '">' + esc(s.agents.join(", ")) + "</span>";
     sh += "</span></div>";

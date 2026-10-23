@@ -18,7 +18,8 @@ import { askText, banner } from './tui.mts';
 import { cfgFromWorkspace, gatherConfig, isConductorDir, listDeployments, normalizeHarnesses, relintRepoBindings } from './config.mts';
 import { TELEMETRY_LEVELS, createTelemetry } from '../gate/telemetry.mjs';
 import { detectStacks } from './stacks.mts';
-import { chatChoice } from './manifest.mts';
+import { chatChoice, draftSkills } from './manifest.mts';
+import { withDraftBanner } from './maturity.mts';
 import { install, memoryRootFor, migrateLegacyLayout, scanMemberInstructionFiles } from './install.mts';
 import { normalizeLock, verify, writeLock } from './lock.mts';
 import { scaffoldDescriptor } from './render.mts';
@@ -183,6 +184,8 @@ export async function compileWorkspace(cfg: Cfg, { verb = 'compiled', extra = nu
   p(`  ${dim('harness')}   ${cfg.harnesses.join(' + ')}   ${dim('mode')} ${cfg.mode === 'strict' ? bold('STRICT') : 'normal'}   ${dim('kaut')} ${cfg.kaut ? (cfg.kautRoot ? `enabled · ${cfg.kautRoot}` : 'enabled') : 'disabled'}   ${dim('deployment')} ${cfg.profile?.name ?? 'generic'}   ${dim('framework')} ${fw}`);
   p(`  ${dim('data')}      ${dt} ${dim(`· ${requireData()}`)}`);
   p(`  ${dim('skills')}    ${cfg.skills.length} ${dim(`· ${cfg.skills.join(', ')}`)}`);
+  const drafts = draftSkills(cfg);
+  if (drafts.length) p(`  ${dim('draft')}     ${yellow(String(drafts.length))} ${dim(`· ${drafts.join(', ')} — not approved for production use; a notice prints on each invocation`)}`);
   p(`  ${dim('agents')}    ${neededAgents(cfg.skills, cfg.catalog).length}`);
   if ((cfg.runbooks ?? []).length) p(`  ${dim('runbooks')}  ${cfg.runbooks!.length} ${dim(`· ${cfg.runbooks!.map((r) => r.name).join(', ')}`)}`);
   const repoDocFiles = artifacts.filter((a) => a.id.startsWith('.taut/repos/'));
@@ -757,8 +760,10 @@ export async function renderPreview(opts: { skill?: string; agent?: string; harn
   const cfgStub = { profile } as unknown as Cfg;
   if (opts.skill) {
     const src = catalog.skills.get(opts.skill) ?? fail(`skill "${opts.skill}" not found in the catalog`);
-    const text = applyMarkers(await fs.readFile(src.path, 'utf8'), gates, `skills/${opts.skill}/SKILL.md`);
-    return { harness: caps.id, id: `${caps.skillsDir}/${opts.skill}/SKILL.md`, content: text, transform: 'gates', degradations: caps.degradations };
+    let text = applyMarkers(await fs.readFile(src.path, 'utf8'), gates, `skills/${opts.skill}/SKILL.md`);
+    const draft = src.meta.maturity === 'draft';
+    if (draft) text = withDraftBanner(text, opts.skill);
+    return { harness: caps.id, id: `${caps.skillsDir}/${opts.skill}/SKILL.md`, content: text, transform: draft ? 'gates+draft' : 'gates', degradations: caps.degradations };
   }
   if (opts.agent) {
     const src = catalog.agents.get(opts.agent) ?? fail(`agent "${opts.agent}" not found in the catalog`);

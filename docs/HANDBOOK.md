@@ -122,6 +122,16 @@ wiring carrying its identity (`--harness …`). Behavior:
 - **Session start** — integrity banner, strict notice, NON-CANONICAL notice,
   "engine/pack moved N commits" advisory, and the model-policy advisory (live model vs
   the profile pin). Advisories never block.
+- **Draft skills** — a pack may ship a skill as `draft` (PACK.md §1): runnable, but not
+  approved for production use. The gate allows it like any managed skill and adds a
+  hook `systemMessage` on every invocation (Skill tool and direct `/slash`): "… is a
+  DRAFT skill — not yet approved for production use; you run it at your own risk". The
+  compiled skill body opens with the same notice as a banner the model prints first, so
+  the warning reaches you on a harness that shows hook messages (claude-code) and on one
+  that does not (the banner is the harness-neutral channel; enforcement strength differs
+  per adapter and is recorded here, not hidden). Drafts are also listed by `status`, by
+  `check` (a warning), in CLAUDE.md / AGENTS.md and on the panel, and flagged in the
+  usage telemetry (`draft: true`).
 - A gate invoked with the identity of a DISABLED harness (stale wiring) fails closed.
 - **opencode capability mapping (recorded degradations, surfaced not hidden):** no
   blocking prompt hook exists, so there is NO prompt-time sweep — drifted core

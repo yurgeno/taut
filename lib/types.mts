@@ -67,11 +67,13 @@ export interface TautWiring {
   mcp?: string[];
   repos?: string[];
   role?: string;
+  // `draft` = shipped but not approved for production use (lib/maturity.mts); absent = stable.
+  maturity?: 'draft';
 }
 
 export interface SkillEntry { path: string; origin: string; description: string; meta: TautWiring }
 export interface AgentEntry { path: string; origin: string }
-export interface FlowDocEntry { name: string; description: string; sequence: string[]; path: string }
+export interface FlowDocEntry { name: string; description: string; sequence: string[]; path: string; maturity?: 'draft' }
 export interface RunbookEntry { name: string; description: string; repos: string[]; path: string }
 export interface DocEntry { name: string; path: string }
 export interface RepoDocFile { file: string; path: string }
@@ -145,13 +147,13 @@ export interface McpServer {
 
 // One taut.lock artifact row. `source`/`from` drive verify --source re-derivation
 // (absent `from` = the framework repo — v1-lock compatible); `transform: 'gates'`
-// records the capability-marker pass.
+// records the capability-marker pass, `'gates+draft'` that pass plus the draft banner.
 export interface ArtifactRow {
   id: string;
   sha256: string;
   source?: string;
   from?: 'data';
-  transform?: 'gates';
+  transform?: 'gates' | 'gates+draft';
 }
 
 export interface Lock {
@@ -173,6 +175,9 @@ export interface Lock {
   // Resolved workspace stacks at compile — `verify --source` rebuilds the stack-*
   // marker gates from this (like kaut/mcp-docs). Absent (legacy lock) = none.
   stacks?: string[];
+  // Installed DRAFT skills (metadata.taut.maturity) — the gate prints a user-facing
+  // notice on each invocation of one. Absent (legacy lock or no drafts) = none.
+  draft?: string[];
   artifacts: ArtifactRow[];
   mcp: { id: string; role: string; serverKey: string; package: string; pin: string; runner: string }[];
 }

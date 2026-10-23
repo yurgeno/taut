@@ -8,7 +8,7 @@ import path from 'node:path';
 
 import { FRAMEWORK_OWNED_NOTE, MCP_CATALOG, langName } from './constants.mts';
 import { stageChain } from './artifacts.mts';
-import { buildManifest, installedFlowDocs, rungEffort, sessionRung } from './manifest.mts';
+import { buildManifest, draftSkills, installedFlowDocs, rungEffort, sessionRung } from './manifest.mts';
 import { fail } from './util.mts';
 import type { Cfg, RepoDocFile } from './types.mts';
 
@@ -327,11 +327,18 @@ export function renderInstructions(cfg: Cfg, { readers }: { readers: string[] })
   // the contextual-precedence law, which belongs to the distribution model itself.
   const lawBullets = cfg.catalog.laws?.summary ?? [];
   const flowDocs = installedFlowDocs(cfg);
+  // Draft skills carry their flag into the table and get one explicit paragraph — the
+  // reader must not learn "not for production" only from the banner at invocation.
+  const drafts = new Set(draftSkills(cfg));
+  const tag = (s: string): string => (drafts.has(s) ? ' (draft)' : '');
   const stageRows = chain
     .filter((s) => cfg.skills.includes(s))
-    .map((s, i) => `| ${i} | \`${s}\` | ${forCodex ? `\`$${s}\`` : `skill \`${s}\``} |`)
+    .map((s, i) => `| ${i} | \`${s}\`${tag(s)} | ${forCodex ? `\`$${s}\`` : `skill \`${s}\``} |`)
     .join('\n');
   const extraSkills = cfg.skills.filter((s) => !chain.includes(s));
+  const draftNote = drafts.size
+    ? `\nDRAFT skills — shipped for evaluation, NOT approved for production use; whoever runs one does so at their own risk (each prints a notice first): ${[...drafts].map((s) => `\`${s}\``).join(', ')}.`
+    : '';
   const skillHome = forCodex || forOpencode ? '.agents/skills/<name>/SKILL.md' : '.claude/skills/<name>/SKILL.md';
   // Content roles, not content names: the stack engine and the
   // cheapest-runnable tier are whichever installed skills declare the roles.
@@ -432,12 +439,12 @@ ${languagesBlock}
 ## Flow (installed stages)
 
 A flow is a DOCUMENTED launch order over installed skills, not an installed entity.
-${flowDocs.length ? `Definitions: ${flowDocs.map((f) => `\`.taut/docs/FLOW-${f.name}.md\``).join(', ')}.` : 'No flow doc matches the installed skills.'}
+${flowDocs.length ? `Definitions: ${flowDocs.map((f) => `\`.taut/docs/FLOW-${f.name}.md\`${f.maturity === 'draft' ? ' (draft)' : ''}`).join(', ')}.` : 'No flow doc matches the installed skills.'}
 
 | Stage | Skill | Where |
 |---|---|---|
 ${stageRows || '| — | (no flow-chain skills installed) | — |'}
-${extraSkills.length ? `\nOther installed skills: ${extraSkills.map((s) => `\`${s}\``).join(', ')} (same home: \`${skillHome}\`).` : ''}
+${extraSkills.length ? `\nOther installed skills: ${extraSkills.map((s) => `\`${s}\`${tag(s)}`).join(', ')} (same home: \`${skillHome}\`).` : ''}${draftNote}
 ${wrapperStacks.length ? `\nStack bring-up: ${wrapperStacks.map((s) => `\`up-${s}\``).join(', ')} — generated per-profile wrappers over \`${stackEngine}\`; profile structure in the manifest (\`stacks\`), recipes in the runbooks below. Per L4 a stack is NEVER the default tier.` : ''}
 ${spaMock ? `\nSPA mock tier (cheapest runnable): \`${spaMock}\` — frontend-only work on a mocked backend; ladder in \`runtimeTiers\`, recipe in the \`spa-mock\` runbook when shipped; never a stack substitute.` : ''}
 ${modelPolicy}

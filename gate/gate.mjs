@@ -144,6 +144,13 @@ try {
   // ARTIFACTS only — harness built-ins (tools, built-in subagent types) are never gated.
   const strict = lock.mode === 'strict';
   const strictHint = `STRICT workspace: only the compiled toolchain (taut.lock) runs here. Add it to the data pack and recompile, or lift the regime: \`taut apply --mode normal --workspace ${WS}\`.`;
+  // DRAFT skills (lock `draft`, from the pack's metadata.taut.maturity): allowed like any
+  // managed skill, but every invocation carries a user-facing notice — `systemMessage` is
+  // the hook field harnesses show to the user, independent of what the model prints. The
+  // compiled skill body carries the same notice as a banner (the harness-neutral channel);
+  // on a harness that ignores hook system messages that banner is the only surface.
+  const draftSet = new Set(lock.draft ?? []);
+  const draftNotice = (name) => JSON.stringify({ systemMessage: `⚠ TAUT: "${name}" is a DRAFT skill — not yet approved for production use; you run it at your own risk.` });
 
   if (EVENT === 'pretooluse') {
     const tool = input.tool_name ?? '';
@@ -236,7 +243,9 @@ try {
       logUsage({ ts, event: 'invoke', kind, name, decision: 'deny', cause: st.toLowerCase(), harness: HARNESS, session_id: sid });
       denyTool(`TAUT gate: ${kind} "${name}" was modified outside the pipeline (${st}: ${id}). Managed artifacts are use-only. ${REPAIR_HINT}`);
     }
-    logUsage({ ts, event: 'invoke', kind, name, decision: 'allow', managed: true, harness: HARNESS, session_id: sid });
+    const draft = kind === 'skill' && draftSet.has(name);
+    logUsage({ ts, event: 'invoke', kind, name, decision: 'allow', managed: true, ...(draft ? { draft: true } : {}), harness: HARNESS, session_id: sid });
+    if (draft) process.stdout.write(draftNotice(name));
     process.exit(0);
   }
 
@@ -292,8 +301,11 @@ try {
       const id = skillArtifact(cmd);
       // Builtin commands (/model, /compact) share this event but are harness features, not
       // toolchain artifacts: only a skill backed by a file on disk is recorded.
-      if (byId.has(id)) logUsage({ ts, event: 'invoke', kind: 'skill', name: cmd, decision: 'allow', managed: true, via: 'slash', harness: HARNESS, session_id: sid });
-      else if (fs.existsSync(path.join(WS, id))) logUsage({ ts, event: 'invoke', kind: 'skill', name: cmd, decision: 'allow', managed: false, via: 'slash', harness: HARNESS, session_id: sid });
+      if (byId.has(id)) {
+        const draft = draftSet.has(cmd);
+        logUsage({ ts, event: 'invoke', kind: 'skill', name: cmd, decision: 'allow', managed: true, via: 'slash', ...(draft ? { draft: true } : {}), harness: HARNESS, session_id: sid });
+        if (draft) process.stdout.write(draftNotice(cmd));
+      } else if (fs.existsSync(path.join(WS, id))) logUsage({ ts, event: 'invoke', kind: 'skill', name: cmd, decision: 'allow', managed: false, via: 'slash', harness: HARNESS, session_id: sid });
     }
     process.exit(0);
   }

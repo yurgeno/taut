@@ -120,6 +120,10 @@ export async function cmdCheck(opts: CliOpts): Promise<void> {
         : `[${h}] live gate allows managed "${firstSkill}"${lock.mode === 'strict' ? '' : ' (normal mode)'}`);
     }
   } else add('gate', 'warn', 'no skills installed — managed-allow probe skipped');
+  // Draft skills: ready to run, but a reader of this report must know they are not
+  // approved for production — a warning, never a failure.
+  const drafts: string[] = manifest?.skillsDraft ?? lock.draft ?? [];
+  if (drafts.length) add('draft', 'warn', `${drafts.length} DRAFT skill(s) installed — not approved for production use, run at your own risk: ${drafts.join(', ')}`);
   if (lock.mode === 'strict') {
     for (const h of harnesses) {
       const r = await runGateProbe(ws, h, { tool_name: 'Skill', tool_input: { skill: PROBE_NAME } });

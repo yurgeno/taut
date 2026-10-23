@@ -167,6 +167,7 @@ async function stateFor(ws: string): Promise<any> {
         ? `repo-excluded: ${(s.meta.repos ?? []).filter((r) => !connected.has(r)).join(', ')}`
         : null,
     agents: s.meta.agents ?? [],
+    draft: s.meta.maturity === 'draft',
   }));
 
   // local.env: names + filled/empty only — a secret VALUE never crosses this boundary.
@@ -238,6 +239,7 @@ async function stateFor(ws: string): Promise<any> {
     mode: manifest.mode ?? 'normal',
     skillsSelection: manifest.skillsSelection ?? 'custom',
     skillsExcluded: manifest.skillsExcluded ?? [],
+    skillsDraft: manifest.skillsDraft ?? [],
     skills,
     agents: manifest.agents ?? [],
     mcp,

@@ -14,6 +14,7 @@ import path from 'node:path';
 import { requireData } from './constants.mts';
 import { exists, fail } from './util.mts';
 import { applyMarkers, withLegacyGates } from './markers.mts';
+import { parseMaturity } from './maturity.mts';
 import type { Catalog, Profile, RepoDocFile } from './types.mts';
 
 // Known capability-gate keys — must mirror capabilityGates (lib/install.mts) and the
@@ -127,8 +128,10 @@ export async function loadCatalog(profile: Profile | null): Promise<Catalog> {
       const id = path.relative(data, p);
       const fm = await readSourceMeta(p, id);
       if (fm.name !== e.name) fail(`${id}: frontmatter name "${fm.name}" != directory name "${e.name}"`);
+      const meta = fm.metadata?.taut ?? {};
+      parseMaturity(meta.maturity, id); // lint: `draft` or absent, nothing else ships
       catalog.skills.set(e.name, {
-        path: p, origin, description: fm.description ?? '', meta: fm.metadata?.taut ?? {},
+        path: p, origin, description: fm.description ?? '', meta,
       });
     }
   };
@@ -169,7 +172,8 @@ export async function loadCatalog(profile: Profile | null): Promise<Catalog> {
         if (!Array.isArray(fm.sequence) || !fm.sequence.length) fail(`${id}: a flow doc needs a non-empty sequence`);
         if (catalog.flowDocs.some((f) => f.name === fm.name))
           fail(`flow doc name collision: "${fm.name}" appears at both the pack and the project level`);
-        catalog.flowDocs.push({ name: fm.name, description: fm.description ?? '', sequence: fm.sequence, path: abs });
+        const maturity = parseMaturity(fm.maturity, id);
+        catalog.flowDocs.push({ name: fm.name, description: fm.description ?? '', sequence: fm.sequence, path: abs, ...(maturity ? { maturity } : {}) });
       } else if (e.name === 'LAWS.md') {
         const fm = await readSourceMeta(abs, id);
         catalog.laws = { path: abs, summary: fm.summary ?? [] };

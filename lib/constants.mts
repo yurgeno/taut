@@ -119,7 +119,7 @@ export const OWNED_MANIFEST_KEYS = new Set([
   // `atlas` stays reserved next to the canonical `kaut`: it is the pre-rename key —
   // legacy manifests carry it and a config bag must never smuggle it back in.
   'name', 'framework', 'deployment', 'description', 'harness', 'harnesses', 'kaut', 'atlas', 'mode', 'telemetry', 'flow', 'flows',
-  'flowDocs', 'runbooks', 'repoDocs', 'skills', 'skillsSelection', 'skillsExcluded',
+  'flowDocs', 'runbooks', 'repoDocs', 'skills', 'skillsSelection', 'skillsExcluded', 'skillsDraft',
   'agents', 'mcp', 'repos', 'laws',
 ]);
 

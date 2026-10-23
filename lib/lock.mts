@@ -9,7 +9,8 @@ import process from 'node:process';
 import { FW_ROOT, MCP_CATALOG, PACK_NAME, requireData } from './constants.mts';
 import { dim, fail, gitInfo, gitInfoOwn, green, red, readIfExists, sha256, yellow } from './util.mts';
 import { applyMarkers, withLegacyGates } from './markers.mts';
-import { rungEffort, sessionRung } from './manifest.mts';
+import { withDraftBanner } from './maturity.mts';
+import { draftSkills, rungEffort, sessionRung } from './manifest.mts';
 import type { ArtifactRow, Cfg, Lock } from './types.mts';
 
 export async function writeLock(cfg: Cfg, artifacts: ArtifactRow[]): Promise<Lock> {
@@ -50,6 +51,8 @@ export async function writeLock(cfg: Cfg, artifacts: ArtifactRow[]): Promise<Loc
     // Resolved workspace stacks — verify --source rebuilds the stack-* marker gates
     // from this, the same way kaut/mcp-docs gates rebuild from the lock.
     ...(cfg.stacks?.length ? { stacks: cfg.stacks } : {}),
+    // Draft skills — the gate's root for the per-invocation notice (lib/maturity.mts).
+    ...((): Partial<Lock> => { const d = draftSkills(cfg); return d.length ? { draft: d } : {}; })(),
     artifacts,
     mcp: cfg.mcp.map((id) => {
       const c = MCP_CATALOG[id];
@@ -122,7 +125,12 @@ export async function verify(ws: string, { json = false, source = false }: { jso
             'mcp-docs': (lock.mcp ?? []).some((m) => m.role === 'docs'),
             ...Object.fromEntries((lock.stacks ?? []).map((s) => [`stack-${s}`, true])),
           });
-          atPin = Buffer.from(applyMarkers(atPin.toString('utf8'), gates, a.source!));
+          let text = applyMarkers(atPin.toString('utf8'), gates, a.source!);
+          // The draft banner is the second deterministic pass (lib/maturity.mts); the
+          // skill name it carries is the artifact's own folder.
+          if (a.transform === 'gates+draft')
+            text = withDraftBanner(text, a.id.match(/skills\/([^/]+)\/SKILL\.md$/)?.[1] ?? a.id);
+          atPin = Buffer.from(text);
         }
         let actual: string | null = null;
         try { actual = sha256(await fs.readFile(path.join(ws, a.id))); } catch { actual = null; }

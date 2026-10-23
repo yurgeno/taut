@@ -33,5 +33,5 @@ keywords:
   - opencode
 repository-code: "https://github.com/yurgeno/taut"
 license: Apache-2.0
-version: 0.7.1
-date-released: '2026-09-03'
+version: 0.8.0
+date-released: '2026-10-22'

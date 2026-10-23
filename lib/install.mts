@@ -10,7 +10,8 @@ import { ENV_HELP, FW_ROOT, HARNESSES, MCP_CATALOG, requireData } from './consta
 import { exists, fail, readIfExists, sha256 } from './util.mts';
 import { neededAgents, parseFrontmatter } from './artifacts.mts';
 import { applyMarkers, withLegacyGates } from './markers.mts';
-import { buildManifest, installedFlowDocs } from './manifest.mts';
+import { withDraftBanner } from './maturity.mts';
+import { buildManifest, draftSkills, installedFlowDocs } from './manifest.mts';
 import { resolveRepoStacks } from './stacks.mts';
 import {
   renderClaudeSettings, renderCodexAgentToml, renderCodexConfigToml, renderCodexHooksToml,
@@ -120,17 +121,20 @@ async function copyArtifact(list: ArtifactRow[], ws: string, rel: string, source
 // docs-MCP-less workspace must not name context7 tools. The lock entry records
 // `transform: 'gates'`; `verify --source` re-applies the same pass at the pinned commit
 // (gate values reconstructed from the lock itself).
-async function copyGated(list: ArtifactRow[], ws: string, rel: string, sourceAbs: string, gates: Record<string, boolean>): Promise<string> {
+// `draft` names the skill whose DRAFT banner rides after the frontmatter (lib/maturity.mts);
+// the lock row records the extra pass so verify --source re-derives the same bytes.
+async function copyGated(list: ArtifactRow[], ws: string, rel: string, sourceAbs: string, gates: Record<string, boolean>, draft: string | null = null): Promise<string> {
   assertNotInstanceData(rel);
   const ref = srcRef(sourceAbs);
   let text: string;
   try { text = applyMarkers(await fs.readFile(sourceAbs, 'utf8'), gates, ref.source); }
   catch (e) { fail(`capability-marker lint: ${(e as Error).message}`); }
+  if (draft) text = withDraftBanner(text, draft);
   const target = path.join(ws, rel);
   await fs.mkdir(path.dirname(target), { recursive: true });
   const buf = Buffer.from(text);
   await fs.writeFile(target, buf);
-  list.push({ id: rel, ...ref, transform: 'gates', sha256: sha256(buf) });
+  list.push({ id: rel, ...ref, transform: draft ? 'gates+draft' : 'gates', sha256: sha256(buf) });
   return text;
 }
 
@@ -208,6 +212,20 @@ export async function install(cfg: Cfg): Promise<ArtifactRow[]> {
   // its own targets are .opencode/agents/*.md, opencode.json (MCP + model + strict
   // permission), and the gate as an auto-loaded .opencode/plugins/ plugin. The trees are
   // otherwise disjoint by construction, so the union is conflict-free.
+  // Maturity consistency (advisory): a draft FLOW whose sequence installs a stable skill,
+  // or a draft SKILL sequenced by a stable flow, is a pack author's inconsistency — the
+  // flag still compiles exactly as declared; the compile only says so, once.
+  const drafts = new Set(draftSkills(cfg));
+  for (const f of installedFlowDocs(cfg)) {
+    const inst = f.sequence.filter((s) => cfg.skills.includes(s));
+    const stable = inst.filter((s) => !drafts.has(s));
+    const draft = inst.filter((s) => drafts.has(s));
+    if (f.maturity === 'draft' && stable.length)
+      (cfg.warnings ??= []).push(`flow "${f.name}" is marked draft but installs stable skill(s) ${stable.join(', ')} — mark them draft too, or drop the flow flag`);
+    if (f.maturity !== 'draft' && draft.length)
+      (cfg.warnings ??= []).push(`flow "${f.name}" is stable but sequences draft skill(s) ${draft.join(', ')} — mark the flow draft, or the skills stable`);
+  }
+
   const seen = new Set<string>();
   const longDesc = new Set<string>();
   for (const h of targets) {
@@ -219,7 +237,7 @@ export async function install(cfg: Cfg): Promise<ArtifactRow[]> {
       const id = `${skillsBase}/${s}/SKILL.md`;
       if (seen.has(id)) continue; // shared tree, identical content — already installed
       seen.add(id);
-      const text = await copyGated(artifacts, ws, id, src.path, gates);
+      const text = await copyGated(artifacts, ws, id, src.path, gates, drafts.has(s) ? s : null);
       // Agent Skills caps `description` at 1024 characters; today's loaders accept more,
       // a stricter one (or a Skills API upload) would drop or reject the skill.
       const desc = parseFrontmatter(text, id).fm.description;
