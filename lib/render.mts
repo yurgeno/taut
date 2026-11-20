@@ -10,6 +10,8 @@ import { FRAMEWORK_OWNED_NOTE, MCP_CATALOG, langName } from './constants.mts';
 import { stageChain } from './artifacts.mts';
 import { buildManifest, draftSkills, installedFlowDocs, rungEffort, sessionRung } from './manifest.mts';
 import { fail } from './util.mts';
+import { normalizeSafeguards } from '../gate/guard.mjs';
+import type { Safeguards } from '../gate/guard.mjs';
 import type { Cfg, RepoDocFile } from './types.mts';
 
 // Every MCP server launches through the workspace's OWN launcher (.taut/mcp-launch.mjs):
@@ -127,6 +129,19 @@ export function renderOpencodeAgentMd(name: string, sourceMd: string, cfg: Cfg):
     '---\n\n' + body;
 }
 
+// Deployment safeguards, declared as VALUES (`manifest.safeguards`: tools / files /
+// commands / git, plus `observe`) and evaluated by the command guard (gate/guard.mjs). One
+// resolver for every surface that carries them — the lock (the guard's trust root), the
+// Claude Code permission rules, `check`. A malformed value fails the compile: a rule that
+// silently matches nothing is worse than no rule.
+export function safeguardsOf(cfg: Cfg): Safeguards | null {
+  try { return normalizeSafeguards(cfg.profile?.manifest?.safeguards); }
+  catch (e) { return fail((e as Error).message); }
+}
+// Sections that are enforced (declared and not in observe mode).
+const enforced = (sg: Safeguards | null, section: 'tools' | 'files' | 'commands' | 'git'): string[] =>
+  sg && !(sg.observe ?? []).includes(section) ? sg[section] ?? [] : [];
+
 export function renderClaudeSettings(cfg: Cfg): string {
   // Gate hooks. PreToolUse(Skill|Agent|Task) = precise per-artifact deny;
   // UserPromptExpansion covers direct /skillname invocations (they bypass PreToolUse);
@@ -141,13 +156,27 @@ export function renderClaudeSettings(cfg: Cfg): string {
   // settings beat the user's saved default (docs: code.claude.com/docs/en/model-config),
   // so a workspace brings its own sessions onto the profile tier structurally.
   const gate = (event: string) => ({ type: 'command', command: `node "\${CLAUDE_PROJECT_DIR}/.taut/gate.mjs" ${event} --harness claude-code`, timeout: 30 });
+  // Safeguards: what Claude Code can refuse by itself becomes a NATIVE deny rule — an exact
+  // tool name (never with parentheses: such a rule is skipped at load without a word) and a
+  // Read rule per protected file. Shell commands go to the guard through a second
+  // PreToolUse entry on `Bash` with its OWN gate event: a permission rule matches the
+  // command text and is passed by an everyday spelling (`git -C <repo> push`), the guard
+  // reads the command. A separate event keeps the integrity path untouched — nothing that
+  // blocks a managed skill can start blocking the shell.
   const rung = sessionRung(cfg);
   const effort = rungEffort(rung, 'claude-code');
+  const sg = safeguardsOf(cfg);
+  const deny = [...enforced(sg, 'tools'), ...enforced(sg, 'files').map((f) => `Read(./${f})`)];
+  const guardsShell = !!sg && (!!sg.files?.length || !!sg.commands?.length || !!sg.git?.length);
   return JSON.stringify({
     ...(rung?.models?.['claude-code'] ? { model: rung.models['claude-code'] } : {}),
     ...(effort ? { effortLevel: effort } : {}),
+    ...(deny.length ? { permissions: { deny } } : {}),
     hooks: {
-      PreToolUse: [{ matcher: cfg.mode === 'strict' ? 'Skill|Agent|Task|mcp__.*' : 'Skill|Agent|Task', hooks: [gate('pretooluse')] }],
+      PreToolUse: [
+        { matcher: cfg.mode === 'strict' ? 'Skill|Agent|Task|mcp__.*' : 'Skill|Agent|Task', hooks: [gate('pretooluse')] },
+        ...(guardsShell ? [{ matcher: 'Bash', hooks: [gate('guard')] }] : []),
+      ],
       UserPromptSubmit: [{ hooks: [gate('promptsubmit')] }],
       UserPromptExpansion: [{ matcher: '*', hooks: [gate('promptexpansion')] }],
       SessionStart: [{ hooks: [gate('sessionstart')] }],

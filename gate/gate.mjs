@@ -1,7 +1,8 @@
 #!/usr/bin/env node
 // TAUT integrity gate — compiled into a workspace by `taut setup` as
 // .taut/gate.mjs and wired to harness hooks (PreToolUse / UserPromptSubmit /
-// UserPromptExpansion / SessionStart). Verifies framework-owned artifacts against
+// UserPromptExpansion / SessionStart; `guard` = the command guard's own PreToolUse entry,
+// see runGuard below). Verifies framework-owned artifacts against
 // taut.lock and BLOCKS use of manually-edited skills/agents (deployment law:
 // managed artifacts are use-only; changes go through the framework source + recompile).
 // Self-contained (node builtins only; works without the framework clone present).
@@ -92,6 +93,49 @@ try { input = JSON.parse(fs.readFileSync(0, 'utf8') || '{}'); } catch { input = 
 const ts = new Date().toISOString();
 const sid = input.session_id;
 
+// COMMAND GUARD (deployment safeguards, lock `safeguards`): tool calls that are not
+// skills, agents or MCP servers — a shell command, a file read — judged by the sibling
+// .taut/guard.mjs against the values the pack declared. Two rules set it apart from the
+// integrity checks around it:
+// - It never blocks on its own failure. The integrity gate fails CLOSED because a broken
+//   check must not wave a tampered skill through; the guard sits in front of EVERY shell
+//   command, and one that failed closed would turn a parser bug into a session nobody can
+//   work in. A guard that cannot run records the fact and lets the call pass — the law
+//   text and the system that owns the data are still there.
+// - It records the RULE that fired, never the command (telemetry privacy law: no tool
+//   arguments).
+// `observe` sections record what they would have denied and deny nothing.
+async function runGuard(lock, harness, tool, ti) {
+  if (!lock?.safeguards) return;
+  try {
+    const { evaluate } = await import(new URL('./guard.mjs', import.meta.url).href);
+    const v = evaluate(tool, ti, lock.safeguards);
+    if (!v) return;
+    logUsage({ ts, event: 'guard', decision: v.observe ? 'observe' : 'deny', section: v.section, rule: v.rule, harness, session_id: sid });
+    if (!v.observe) denyTool(v.reason);
+  } catch (e) {
+    logUsage({ ts, event: 'guard', decision: 'error', cause: String(e?.message ?? e).slice(0, 120), harness, session_id: sid });
+  }
+}
+// Claude Code wires the guard as its OWN PreToolUse entry (matcher `Bash`) with this
+// event, so the shell never enters the integrity path below: a missing lock, a disabled
+// harness or a drifted core artifact keeps blocking managed skills there, and keeps NOT
+// blocking `ls` here.
+if (EVENT === 'guard') {
+  let lock = null;
+  try { lock = JSON.parse(fs.readFileSync(path.join(WS, 'taut.lock'), 'utf8')); } catch { lock = null; }
+  if (lock) {
+    initTelemetry(lock.telemetry, {
+      engine: lock.framework?.commit?.slice(0, 7) ?? null,
+      data: lock.data?.commit?.slice(0, 7) ?? null,
+      mode: lock.mode ?? 'normal',
+      harnesses: lock.harnesses ?? (lock.harness ? [lock.harness] : []),
+    });
+    await runGuard(lock, HARNESS_ARG ?? 'claude-code', input.tool_name ?? '', input.tool_input ?? {});
+  }
+  process.exit(0);
+}
+
 try {
   let lock;
   try { lock = JSON.parse(fs.readFileSync(path.join(WS, 'taut.lock'), 'utf8')); }
@@ -155,6 +199,11 @@ try {
   if (EVENT === 'pretooluse') {
     const tool = input.tool_name ?? '';
     const ti = input.tool_input ?? {};
+    // Harnesses whose hook sees every tool call (Codex, opencode) reach the guard here;
+    // a skill/agent invocation carries a NAME in its input, not a command, so only the
+    // tool-name section applies to it.
+    const invokesArtifact = ['Skill', 'skill', 'Agent', 'agent', 'Task', 'task'].includes(tool);
+    await runGuard(lock, HARNESS, tool, invokesArtifact ? {} : ti);
     // MCP calls reach the gate only where the matcher sends them (strict claude-code
     // widens it; Codex/opencode hooks are always broad). Foreign server in strict = deny;
     // the allowed set is the LOCK's serverKeys — the same trust root as everything else.

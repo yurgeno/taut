@@ -68,9 +68,9 @@ function mcpHandshake(command: string, args: string[], env: NodeJS.ProcessEnv): 
   });
 }
 
-function runGateProbe(ws: string, harness: string, input: unknown): Promise<{ code: number | string; stdout: string }> {
+function runGateProbe(ws: string, harness: string, input: unknown, event = 'pretooluse'): Promise<{ code: number | string; stdout: string }> {
   return new Promise((resolve) => {
-    const child = execFile(process.execPath, [path.join(ws, '.taut', 'gate.mjs'), 'pretooluse', '--harness', harness],
+    const child = execFile(process.execPath, [path.join(ws, '.taut', 'gate.mjs'), event, '--harness', harness],
       // TAUT_PROBE marks the telemetry rows this self-test produces. Without it the probe's
       // allow-row is indistinguishable from a real invocation of manifest.skills[0], and
       // every `taut check` silently inflates that one skill's usage count.
@@ -131,6 +131,33 @@ export async function cmdCheck(opts: CliOpts): Promise<void> {
         r.stdout.includes('"deny"') ? `[${h}] strict regime enforced (foreign probe denied)`
           : `[${h}] STRICT mode recorded but the foreign probe was NOT denied — gate wiring broken (repair)`);
     }
+  }
+
+  // Safeguards: the command guard proven live, per harness and per declared section — a
+  // rule that did not load protects nothing and says nothing. One probe the section must
+  // refuse (in observe mode: must let through, and the row says so), one everyday command
+  // it must leave alone. Claude Code reaches the guard through its own `guard` event.
+  const sg = lock.safeguards;
+  if (sg) {
+    const probes: [string, unknown][] = [];
+    if (sg.git?.length) probes.push(['git', { tool_name: 'Bash', tool_input: { command: `git -C . ${sg.git[0]}` } }]);
+    if (sg.commands?.length) probes.push(['commands', { tool_name: 'Bash', tool_input: { command: sg.commands[0].replace(/\*$/, '').replace(/=$/, '=x true') } }]);
+    if (sg.files?.length) probes.push(['files', { tool_name: 'Bash', tool_input: { command: `cat ${sg.files[0]}` } }]);
+    const observed = new Set<string>(sg.observe ?? []);
+    for (const h of harnesses) {
+      const event = h === 'claude-code' ? 'guard' : 'pretooluse';
+      const bad: string[] = [];
+      for (const [section, input] of probes) {
+        const denied = (await runGateProbe(ws, h, input, event)).stdout.includes('"deny"');
+        if (denied === observed.has(section)) bad.push(`${section} ${observed.has(section) ? 'DENIES in observe mode' : 'NOT denied'}`);
+      }
+      if ((await runGateProbe(ws, h, { tool_name: 'Bash', tool_input: { command: 'git status' } }, event)).stdout.includes('"deny"')) bad.push('`git status` denied');
+      const live = probes.map(([s]) => (observed.has(s) ? `${s} (observe)` : s)).join(', ');
+      add('safeguards', bad.length ? 'fail' : 'ok', bad.length
+        ? `[${h}] command guard misbehaves: ${bad.join('; ')} — run \`taut repair\``
+        : `[${h}] command guard live: ${live || 'no shell sections'}${sg.tools?.length ? ` · ${sg.tools.length} tool(s) denied by name` : ''}`);
+    }
+    if (observed.size) add('safeguards', 'warn', `observe mode: ${[...observed].join(', ')} — recorded, not denied (set in the pack's deployment config)`);
   }
 
   // Member repos: reachable, git-readable, current branch known. Read-only probes.

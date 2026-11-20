@@ -58,6 +58,7 @@ export const HARNESS_CAPS: Record<string, HarnessAdapter> = {
     degradations: [
       { id: 'codex-skill-allowlist', text: 'Claude-Code frontmatter tool allowlists are informational here.' },
       { id: 'codex-agent-tools', text: 'A subagent `tools:` allowlist has no TOML counterpart and is dropped on render — the body carries the methodology; a deployment `agentSandbox` value renders as that agent\'s `sandbox_mode` (mechanical read-only where declared).' },
+      { id: 'codex-safeguards', text: 'Deployment safeguards (denied tools, protected files, commands, git subcommands) are enforced by the gate hook alone here — there is no native permission rule behind them, so they hold only while the hooks are approved.' },
       { id: 'codex-hook-trust', text: 'Codex runs the project gate hooks only once this workspace\'s `.codex/` layer is trusted, and skips a hook whose command changed until it is approved again (`/hooks`) — after an update that rewires the gate, approve the hooks before working.' },
     ],
   },
@@ -77,6 +78,7 @@ export const HARNESS_CAPS: Record<string, HarnessAdapter> = {
       { id: 'opencode-no-prompt-sweep', text: 'there is no prompt-time integrity sweep — drifted core artifacts are caught at the first managed tool call instead of the first prompt' },
       { id: 'opencode-banner', text: 'the session-start banner is best-effort' },
       { id: 'opencode-allowlist', text: 'Claude-Code frontmatter tool allowlists are informational here' },
+      { id: 'opencode-safeguards', text: 'deployment safeguards (denied tools, protected files, commands, git subcommands) are enforced by the gate plugin alone, and a gate that cannot run does not block built-in tools' },
       { id: 'opencode-mcp-naming', text: 'MCP tools are advertised as `<serverKey>_<tool>`, not `mcp__<serverKey>__<tool>`' },
     ],
   },

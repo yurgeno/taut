@@ -203,6 +203,35 @@ The engine treats these as opaque values except at the named seams:
   other mode (`danger-full-access` included) fails the compile; agents left out inherit
   the session sandbox. Read-only also means NO network — keep agents that call a CLI over
   the network (an SCM client, say) out of it.
+- `safeguards` — what a session must never do, as VALUES the gate enforces
+  (`{tools[], files[], commands[], git[], observe[]}`; every key optional). A law in an
+  instruction file is context, and a sentence in the task can lift it; these cannot be
+  lifted in chat. SEAMS: the values ride `taut.lock`; `.taut/guard.mjs` ships next to the
+  gate and judges every tool call that is not a skill, an agent or an MCP server.
+  - `tools` — exact tool names that are never called (a tracker's write tools, say).
+    Claude Code also gets them as native `permissions.deny` entries. No parentheses, no
+    wildcards: a harness skips such a rule at load without a word, so the compile refuses it.
+  - `files` — workspace-relative files no tool and no shell command may touch
+    (`.taut/local.env`). Claude Code also gets a native `Read(./<file>)` deny rule.
+  - `commands` — programs that are never run: a name (`psql`), a prefix (`flyway*`), or an
+    environment assignment (`PGPASSWORD=*`). The guard finds the program each part of a
+    command line runs — through `sudo`/`env`/`xargs`, `sh -c '…'`, `$( … )`, a container
+    `exec`/`run`, `ssh`, a build tool's task name — so `docker exec db psql` and
+    `./gradlew flywayMigrate` are refused while `grep -rn flyway build.gradle`, a file
+    named after a client, or a commit message that mentions one pass.
+  - `git` — subcommands that are never run, `"<subcommand>"` or `"<subcommand> <flag>"`
+    (`push`, `reset --hard`, `clean -f`), in any spelling: `git -C <repo> push`,
+    `git -c k=v push`, a full path, a wrapper. Everything not listed runs as before.
+  - `observe` — section names that only RECORD what they would have denied (telemetry
+    `event: guard`, the rule, never the command). The way to introduce a section on a
+    live team: observe, read the telemetry, then remove it from this list.
+  Limits, by construction: a command assembled at run time, a script file that makes the
+  call, a database driver used from a language runtime and a git alias are not seen — the
+  system that owns the data (token scope, branch protection, a database role) is what
+  stops those. Per harness: Claude Code = native rules + its own `Bash` hook entry;
+  Codex and opencode = the gate hook alone (recorded as a degradation). The guard never
+  blocks on its own failure — see HANDBOOK §4. A deployment that declares no safeguards
+  compiles exactly as before: no file, no hook entry, no rule.
 - `modelTiers` — the MODEL PROFILE (§8). SEAMS: `sessionTier` renders into harness
   configs + the lock; the ladder maps agent pins into Codex TOML; single-harness
   compiles add flat per-rung values.
@@ -281,6 +310,8 @@ Unknown skill/MCP-server/harness/deployment names (note: the roles in a skill's
 mandatory repos missing; duplicate repo basenames; artifacts binding to repos the
 deployment does not know; runbook references to nothing; malformed or unknown capability
 markers; a `modelTiers.sessionTier` naming no rung; legacy `metadata.federation` wiring;
-shared/project name collisions (except the sanctioned LAWS override and catalog merge).
+shared/project name collisions (except the sanctioned LAWS override and catalog merge);
+a malformed `safeguards` value (an unknown key, a tool name with parentheses or a wildcard,
+a path that leaves the workspace).
 Warnings (never silent): scan-excluded repos, lint-excluded artifacts, flow-chain gaps,
 compiler-owned manifest keys in a config.

@@ -119,7 +119,7 @@ export async function compileWorkspace(cfg: Cfg, { verb = 'compiled', extra = nu
   // toolchain (instructions, hook wiring, MCP config), not just the payload trees.
   const HARNESS_ROOT = new Set(['CLAUDE.md', 'AGENTS.md', '.claude/settings.json', '.codex/config.toml', 'opencode.json']);
   const sweepable = (id: string) => PAYLOAD.test(id) || LEGACY.test(id) || HARNESS_ROOT.has(id)
-    || id === '.mcp.json' || id === 'ui' || id === '.taut/mcp-servers.json' || id === '.taut/mcp-launch.mjs';
+    || id === '.mcp.json' || id === 'ui' || id === '.taut/mcp-servers.json' || id === '.taut/mcp-launch.mjs' || id === '.taut/guard.mjs';
   const removed: string[] = [];
   for (const a of (oldLock?.artifacts ?? [])) {
     // Belt to the PAYLOAD regex: instance data is NEVER swept, whatever a lock claims.

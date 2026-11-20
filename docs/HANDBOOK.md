@@ -81,6 +81,7 @@ CLAUDE.md / AGENTS.md      generated instructions per enabled harness
 .opencode/plugins/taut-gate.js  the gate as an opencode plugin (auto-loaded; CORE)
 opencode.json              opencode MCP + session model pin (+ strict skill allowlist)
 .taut/gate.mjs             the integrity gate (shipped, self-contained)
+.taut/guard.mjs            the command guard (only when the deployment declares safeguards)
 .taut/mcp-launch.mjs       the MCP launcher (reads .taut/local.env itself)
 .taut/mcp-servers.json     the allowed MCP servers the launcher and gate read
 .taut/local.json           machine binding: repo paths, engine/pack/KAUT roots (never shared)
@@ -122,6 +123,19 @@ wiring carrying its identity (`--harness …`). Behavior:
 - **Session start** — integrity banner, strict notice, NON-CANONICAL notice,
   "engine/pack moved N commits" advisory, and the model-policy advisory (live model vs
   the profile pin). Advisories never block.
+- **Command guard** — when the deployment declares `safeguards` (PACK.md §6.3), tool
+  calls that are not skills, agents or MCP servers are judged against them by
+  `.taut/guard.mjs`: a denied tool name, a protected file, a program that is never run, a
+  git subcommand that is never run — in any spelling of the command. Claude Code wires it
+  as a second PreToolUse entry on `Bash` with its own gate event (`guard`), next to native
+  deny rules for the tool names and files; Codex and opencode reach it through the hook
+  that already sees every tool call. Two things differ from the integrity checks on
+  purpose. The guard **never blocks on its own failure**: it stands in front of every
+  shell command, so a guard that cannot load (or a missing lock) records the fact and lets
+  the call pass — integrity keeps failing closed for managed skills, where it always did.
+  And it records **the rule that fired, never the command** (telemetry `event: guard`,
+  decision `deny` | `observe` | `error`). `taut check` proves it live per harness: one
+  call each section must refuse, one everyday command it must leave alone.
 - **Draft skills** — a pack may ship a skill as `draft` (PACK.md §1): runnable, but not
   approved for production use. The gate allows it like any managed skill and adds a
   hook `systemMessage` on every invocation (Skill tool and direct `/slash`): "… is a

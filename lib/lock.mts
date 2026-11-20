@@ -11,6 +11,7 @@ import { dim, fail, gitInfo, gitInfoOwn, green, red, readIfExists, sha256, yello
 import { applyMarkers, withLegacyGates } from './markers.mts';
 import { withDraftBanner } from './maturity.mts';
 import { draftSkills, rungEffort, sessionRung } from './manifest.mts';
+import { normalizeSafeguards } from '../gate/guard.mjs';
 import type { ArtifactRow, Cfg, Lock } from './types.mts';
 
 export async function writeLock(cfg: Cfg, artifacts: ArtifactRow[]): Promise<Lock> {
@@ -53,6 +54,12 @@ export async function writeLock(cfg: Cfg, artifacts: ArtifactRow[]): Promise<Loc
     ...(cfg.stacks?.length ? { stacks: cfg.stacks } : {}),
     // Draft skills — the gate's root for the per-invocation notice (lib/maturity.mts).
     ...((): Partial<Lock> => { const d = draftSkills(cfg); return d.length ? { draft: d } : {}; })(),
+    // Deployment safeguards — the command guard's values ride the lock like `mode`: the
+    // gate reads them from the root it already trusts, never from the editable manifest.
+    ...((): Partial<Lock> => {
+      let sg; try { sg = normalizeSafeguards(cfg.profile?.manifest?.safeguards); } catch (e) { return fail((e as Error).message); }
+      return sg ? { safeguards: sg } : {};
+    })(),
     artifacts,
     mcp: cfg.mcp.map((id) => {
       const c = MCP_CATALOG[id];

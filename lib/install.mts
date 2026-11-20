@@ -16,7 +16,7 @@ import { resolveRepoStacks } from './stacks.mts';
 import {
   renderClaudeSettings, renderCodexAgentToml, renderCodexConfigToml, renderCodexHooksToml,
   renderInstructions, renderMcpJson, renderMcpServersSpec, renderOpencodeAgentMd,
-  renderOpencodeJson, renderStackSkill, renderUiShim, validateAgentSandbox,
+  renderOpencodeJson, renderStackSkill, renderUiShim, safeguardsOf, validateAgentSandbox,
 } from './render.mts';
 import type { ArtifactRow, Cfg, MemberFile } from './types.mts';
 
@@ -160,6 +160,7 @@ export async function install(cfg: Cfg): Promise<ArtifactRow[]> {
   const catalog = cfg.catalog;
   const agents = neededAgents(cfg.skills, catalog);
   validateAgentSandbox(cfg, catalog.agents.keys());
+  safeguardsOf(cfg); // malformed safeguards fail the compile before anything is written
   // Canonical HARNESSES order (not answers order) keeps the artifact list — and the
   // lock — deterministic.
   const targets = HARNESSES.filter((h) => cfg.harnesses.includes(h));
@@ -311,6 +312,10 @@ export async function install(cfg: Cfg): Promise<ArtifactRow[]> {
   // telemetry (local-only daily files under memory/telemetry/); the gate imports it as
   // a sibling, the CLI uses the engine copy. Missing adapter = telemetry no-op.
   await copyArtifact(artifacts, ws, '.taut/telemetry.mjs', path.join(FW_ROOT, 'gate', 'telemetry.mjs'));
+  // The command guard ships next to the gate ONLY when the deployment declares safeguards
+  // (validated here, before anything is written with them): a workspace without them gets
+  // no new file and no new hook. Non-payload id ⇒ CORE for the gate, like the gate itself.
+  if (safeguardsOf(cfg)) await copyArtifact(artifacts, ws, '.taut/guard.mjs', path.join(FW_ROOT, 'gate', 'guard.mjs'));
   // The law text ships WITH the workspace (the law source is the
   // framework repo, never an external path); non-payload id ⇒ CORE for the gate.
   // Laws are a CORE document of the distribution model — every workspace gets them.

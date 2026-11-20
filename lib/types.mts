@@ -178,6 +178,9 @@ export interface Lock {
   // Installed DRAFT skills (metadata.taut.maturity) — the gate prints a user-facing
   // notice on each invocation of one. Absent (legacy lock or no drafts) = none.
   draft?: string[];
+  // Deployment safeguards (manifest.safeguards, normalized) — the values the command
+  // guard evaluates. Absent (legacy lock or none declared) = the guard has nothing to do.
+  safeguards?: { tools?: string[]; files?: string[]; commands?: string[]; git?: string[]; observe?: string[] };
   artifacts: ArtifactRow[];
   mcp: { id: string; role: string; serverKey: string; package: string; pin: string; runner: string }[];
 }
